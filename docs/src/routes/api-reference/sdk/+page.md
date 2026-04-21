@@ -11,13 +11,13 @@ const registrationDiagram = `sequenceDiagram
     participant Relay as Portal Relay
 
     Client->>Relay: POST /sdk/register/challenge
-    Note right of Client: Send identity + metadata
+    Note right of Client: Send address
     Relay->>Client: challenge_id + siwe_message
 
     Client->>Client: Sign SIWE message with private key
 
     Client->>Relay: POST /sdk/register
-    Note right of Client: challenge_id + signed message
+    Note right of Client: registration payload + signed message
     Relay->>Client: access_token + lease info
     Note left of Relay: hostname, udp_addr, tcp_addr`
 
@@ -79,8 +79,8 @@ curl https://relay.example.com/sdk/domain
 {
   "ok": true,
   "data": {
-    "protocol_version": "5",
-    "release_version": "v2.1.5"
+    "protocol_version": "7",
+    "release_version": "v2.1.6"
   }
 }
 ```
@@ -97,16 +97,7 @@ Request a SIWE (Sign-In with Ethereum) challenge message for tunnel registration
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `identity` | `object` | Yes | Identity object (see below) |
-| `identity.name` | `string` | Yes | Lease name (used as subdomain) |
-| `identity.address` | `string` | Yes | Ethereum address (hex, `0x`-prefixed) |
-| `metadata` | `object` | No | Lease metadata |
-| `metadata.description` | `string` | No | Human-readable description |
-| `metadata.tags` | `string[]` | No | Tags for categorization |
-| `metadata.thumbnail` | `string` | No | Base64-encoded thumbnail image |
-| `ttl` | `int` | No | Lease TTL in seconds (default: server-configured) |
-| `udp_enabled` | `bool` | No | Request UDP (QUIC) transport |
-| `tcp_enabled` | `bool` | No | Request dedicated TCP port |
+| `address` | `string` | Yes | Ethereum address (hex, `0x`-prefixed) |
 
 **Response fields:**
 
@@ -121,11 +112,7 @@ Request a SIWE (Sign-In with Ethereum) challenge message for tunnel registration
 | Code | Status | Description |
 |------|--------|-------------|
 | `ip_banned` | 403 | Source IP is banned |
-| `feature_unavailable` | 503 | UDP or TCP transport not available |
-| `udp_disabled` | 403 | UDP transport disabled by admin policy |
-| `udp_capacity_exceeded` | 503 | UDP lease capacity reached |
-| `tcp_port_disabled` | 403 | TCP port transport disabled by admin policy |
-| `tcp_port_capacity_exceeded` | 503 | TCP port lease capacity reached |
+| `invalid_request` | 400 | Invalid identity or registration payload |
 
 **Example:**
 
@@ -133,14 +120,7 @@ Request a SIWE (Sign-In with Ethereum) challenge message for tunnel registration
 curl -X POST https://relay.example.com/sdk/register/challenge \
   -H "Content-Type: application/json" \
   -d '{
-    "identity": {
-      "name": "my-app",
-      "address": "0x1234567890abcdef1234567890abcdef12345678"
-    },
-    "metadata": {
-      "description": "My web application"
-    },
-    "ttl": 60
+    "address": "0x1234567890abcdef1234567890abcdef12345678"
   }'
 ```
 
@@ -161,7 +141,7 @@ curl -X POST https://relay.example.com/sdk/register/challenge \
 
 ### `POST /sdk/register`
 
-Complete tunnel registration by submitting the signed SIWE challenge. Returns an access token and lease information including the assigned hostname.
+Complete tunnel registration by submitting the registration payload with the signed SIWE challenge. Returns an access token and lease information including the assigned hostname.
 
 **Auth:** None (authenticated by SIWE signature)
 
@@ -172,6 +152,11 @@ Complete tunnel registration by submitting the signed SIWE challenge. Returns an
 | `challenge_id` | `string` | Yes | Challenge ID from `/sdk/register/challenge` |
 | `siwe_message` | `string` | Yes | The SIWE message that was signed |
 | `siwe_signature` | `string` | Yes | Ethereum personal sign signature (hex) |
+| `identity` | `object` | Yes | Identity object for the lease |
+| `metadata` | `object` | No | Lease metadata |
+| `ttl` | `int` | No | Lease TTL in seconds |
+| `udp_enabled` | `bool` | No | Request UDP transport |
+| `tcp_enabled` | `bool` | No | Request dedicated TCP port |
 | `reported_ip` | `string` | No | Client-reported public IP address |
 
 **Response fields:**
@@ -209,6 +194,14 @@ Complete tunnel registration by submitting the signed SIWE challenge. Returns an
 curl -X POST https://relay.example.com/sdk/register \
   -H "Content-Type: application/json" \
   -d '{
+    "identity": {
+      "name": "my-app",
+      "address": "0x1234567890abcdef1234567890abcdef12345678"
+    },
+    "metadata": {
+      "description": "My web application"
+    },
+    "ttl": 60,
     "challenge_id": "abc123",
     "siwe_message": "relay.example.com wants you to sign in...",
     "siwe_signature": "0xdeadbeef..."

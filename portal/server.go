@@ -334,6 +334,13 @@ func (s *Server) AdminLeases() []types.AdminLease {
 	return s.registry.AdminLeases(time.Now())
 }
 
+func (s *Server) AccountLeases(address string) []types.Lease {
+	if s == nil || s.registry == nil {
+		return nil
+	}
+	return s.registry.AccountLeases(address, time.Now())
+}
+
 func (s *Server) RelayIdentity() types.RelayIdentity {
 	if s == nil {
 		return types.RelayIdentity{}

@@ -52,7 +52,7 @@ High-signal constraints for the relay-server frontend. Only items expensive to r
    - Why: manual `useCallback` is redundant with the compiler and adds noise.
 
 2. **Feature state lives in page-level hooks and is prop-drilled. No global state library.**
-   `useServerList`, `useAdmin`, `useAuth` own feature state at the page level. Theme is the exception — it uses a dedicated `ThemeProvider` context (`src/components/ThemeProvider.tsx`). `localStorage` for persistence (favorites, theme, tunnel seed) with silent fallback on errors.
+   `useServerList`, `useAdmin`, `useWalletAuth` own feature state at the page level. Theme is the exception — it uses a dedicated `ThemeProvider` context (`src/components/ThemeProvider.tsx`). `localStorage` for persistence (favorites, theme, tunnel seed) with silent fallback on errors.
    - Why: the prop-drilling pattern for feature state is intentional. Adding shared state providers for feature data changes the data flow architecture.
 
 3. **Only `handleBPSChange` uses optimistic update with rollback.**

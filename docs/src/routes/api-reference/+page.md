@@ -49,19 +49,21 @@ Portal uses two separate authentication mechanisms depending on the caller.
 
 SDK clients authenticate using Sign-In with Ethereum (SIWE):
 
-1. POST a challenge request to `/sdk/register/challenge` with your identity
+1. POST a challenge request to `/sdk/register/challenge` with your address
 2. Sign the returned SIWE message with your Ethereum private key
-3. POST the signed message to `/sdk/register` to receive a JWT access token
+3. POST the registration payload plus the signed message to `/sdk/register` to receive a JWT access token
 4. Include the access token in subsequent requests via the `X-Portal-Access-Token` header or in the JSON request body
 
-### Admin Authentication (Secret Key)
+### Wallet and Admin Authentication
 
-Admin clients authenticate using a shared secret key:
+Browser clients authenticate with a wallet SIWE session:
 
-1. POST to `/admin/login` with `{ "key": "<secret>" }`
-2. The server sets a `portal_admin` session cookie (HttpOnly, Secure, SameSite=Strict)
-3. Include the cookie in subsequent admin requests
-4. Sessions expire after 24 hours
+1. POST a challenge request to `/auth/siwe/challenge` with the wallet address
+2. Sign the returned SIWE message with the wallet
+3. POST the signed message to `/auth/siwe/verify`
+4. The server sets a `portal_session` cookie for subsequent wallet requests
+
+Admin access is wallet-native. Protected `/admin` endpoints require the current wallet session address to match `admin_address` in the relay admin settings.
 
 ## Endpoint Summary
 
@@ -80,24 +82,28 @@ Admin clients authenticate using a shared secret key:
 
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
-| `POST` | [`/admin/login`](/api-reference/admin#post-adminlogin) | Authenticate with secret key | None |
-| `POST` | [`/admin/logout`](/api-reference/admin#post-adminlogout) | End admin session | Session Cookie |
-| `GET` | [`/admin/auth/status`](/api-reference/admin#get-adminauthstatus) | Check authentication status | None |
-| `GET` | [`/admin/snapshot`](/api-reference/admin#get-adminsnapshot) | Get full relay state snapshot | Session Cookie |
-| `POST` | [`/admin/settings/landing-page`](/api-reference/admin#post-adminsettingslanding-page) | Toggle landing page | Session Cookie |
-| `POST` | [`/admin/settings/udp`](/api-reference/admin#post-adminsettingsudp) | Configure UDP settings | Session Cookie |
-| `POST` | [`/admin/settings/tcp-port`](/api-reference/admin#post-adminsettingstcp-port) | Configure TCP port settings | Session Cookie |
-| `POST` | [`/admin/settings/approval-mode`](/api-reference/admin#post-adminsettingsapproval-mode) | Set approval mode | Session Cookie |
-| `POST` | [`/admin/leases/{name}/{addr}/ban`](/api-reference/admin#lease-management) | Ban a lease identity | Session Cookie |
-| `DELETE` | [`/admin/leases/{name}/{addr}/ban`](/api-reference/admin#lease-management) | Unban a lease identity | Session Cookie |
-| `POST` | [`/admin/leases/{name}/{addr}/bps`](/api-reference/admin#lease-management) | Set bandwidth limit for a lease | Session Cookie |
-| `DELETE` | [`/admin/leases/{name}/{addr}/bps`](/api-reference/admin#lease-management) | Remove bandwidth limit | Session Cookie |
-| `POST` | [`/admin/leases/{name}/{addr}/approve`](/api-reference/admin#lease-management) | Approve a lease | Session Cookie |
-| `DELETE` | [`/admin/leases/{name}/{addr}/approve`](/api-reference/admin#lease-management) | Revoke lease approval | Session Cookie |
-| `POST` | [`/admin/leases/{name}/{addr}/deny`](/api-reference/admin#lease-management) | Deny a lease | Session Cookie |
-| `DELETE` | [`/admin/leases/{name}/{addr}/deny`](/api-reference/admin#lease-management) | Remove lease denial | Session Cookie |
-| `POST` | [`/admin/ips/{ip}/ban`](/api-reference/admin#ip-management) | Ban an IP address | Session Cookie |
-| `DELETE` | [`/admin/ips/{ip}/ban`](/api-reference/admin#ip-management) | Unban an IP address | Session Cookie |
+| `GET` | [`/admin/snapshot`](/api-reference/admin#get-adminsnapshot) | Get full relay state snapshot | Admin Wallet Session |
+| `POST` | [`/admin/settings`](/api-reference/admin#post-adminsettings) | Update relay admin settings | Admin Wallet Session |
+| `POST` | [`/admin/leases/{name}/{addr}/ban`](/api-reference/admin#lease-management) | Ban a lease identity | Admin Wallet Session |
+| `DELETE` | [`/admin/leases/{name}/{addr}/ban`](/api-reference/admin#lease-management) | Unban a lease identity | Admin Wallet Session |
+| `POST` | [`/admin/leases/{name}/{addr}/bps`](/api-reference/admin#lease-management) | Set bandwidth limit for a lease | Admin Wallet Session |
+| `DELETE` | [`/admin/leases/{name}/{addr}/bps`](/api-reference/admin#lease-management) | Remove bandwidth limit | Admin Wallet Session |
+| `POST` | [`/admin/leases/{name}/{addr}/approve`](/api-reference/admin#lease-management) | Approve a lease | Admin Wallet Session |
+| `DELETE` | [`/admin/leases/{name}/{addr}/approve`](/api-reference/admin#lease-management) | Revoke lease approval | Admin Wallet Session |
+| `POST` | [`/admin/leases/{name}/{addr}/deny`](/api-reference/admin#lease-management) | Deny a lease | Admin Wallet Session |
+| `DELETE` | [`/admin/leases/{name}/{addr}/deny`](/api-reference/admin#lease-management) | Remove lease denial | Admin Wallet Session |
+| `POST` | [`/admin/ips/{ip}/ban`](/api-reference/admin#ip-management) | Ban an IP address | Admin Wallet Session |
+| `DELETE` | [`/admin/ips/{ip}/ban`](/api-reference/admin#ip-management) | Unban an IP address | Admin Wallet Session |
+
+### Wallet Auth Endpoints
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| `GET` | `/auth/session` | Get current wallet session status | Wallet Session optional |
+| `POST` | `/auth/logout` | Clear current wallet session | Wallet Session optional |
+| `GET` | `/auth/leases` | List leases owned by current wallet | Wallet Session |
+| `POST` | `/auth/siwe/challenge` | Request a browser-wallet SIWE challenge | None |
+| `POST` | `/auth/siwe/verify` | Verify SIWE signature and create wallet session | None |
 
 ### System Endpoints
 
@@ -220,7 +226,6 @@ All error codes that may appear in the `error.code` field:
 
 | Code | Description |
 |------|-------------|
-| `auth_disabled` | Admin authentication is not configured |
 | `feature_unavailable` | Requested feature is not available |
 | `hijack_failed` | HTTP connection hijack failed |
 | `hijack_unsupported` | HTTP connection hijack not supported |
@@ -229,7 +234,6 @@ All error codes that may appear in the `error.code` field:
 | `invalid_address` | Invalid Ethereum address |
 | `invalid_ip` | Invalid IP address format |
 | `invalid_json` | Malformed JSON request body |
-| `invalid_key` | Invalid admin secret key |
 | `invalid_mode` | Invalid approval mode value |
 | `invalid_request` | General request validation failure |
 | `internal` | Internal server error |
@@ -237,7 +241,6 @@ All error codes that may appear in the `error.code` field:
 | `lease_not_found` | No lease found for the given identity |
 | `lease_rejected` | Lease is not approved for routing |
 | `method_not_allowed` | HTTP method not allowed for this endpoint |
-| `session_create_failed` | Failed to create admin session |
 | `unauthorized` | Authentication required or token invalid |
 | `udp_port_exhausted` | No UDP ports available |
 | `udp_disabled` | UDP transport is disabled |

@@ -2,15 +2,15 @@ export const API_PATHS = {
   admin: {
     prefix: "/admin",
     snapshot: "/admin/snapshot",
-    login: "/admin/login",
-    logout: "/admin/logout",
-    authStatus: "/admin/auth/status",
     leases: "/admin/leases",
 
-    approvalMode: "/admin/settings/approval-mode",
-    landingPage: "/admin/settings/landing-page",
-    udpSettings: "/admin/settings/udp",
-    tcpPortSettings: "/admin/settings/tcp-port",
+    settings: "/admin/settings",
+  },
+  auth: {
+    session: "/auth/session",
+    logout: "/auth/logout",
+    siweChallenge: "/auth/siwe/challenge",
+    siweVerify: "/auth/siwe/verify",
   },
   sdk: {
     prefix: "/sdk",
@@ -36,7 +36,6 @@ export const ROUTE_PATHS = {
   home: "/",
   serverDetail: "/server/:id",
   admin: "/admin",
-  adminLogin: "/admin/login",
 } as const;
 
 export function encodePathPart(value: string): string {

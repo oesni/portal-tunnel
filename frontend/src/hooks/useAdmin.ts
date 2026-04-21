@@ -14,23 +14,19 @@ export type ApprovalMode = "auto" | "manual";
 
 type LeaseAction = "approve" | "deny" | "ban";
 
-type ApprovalModeResponse = {
-  approval_mode?: ApprovalMode;
-};
-
-type LandingPageSettingsResponse = {
-  enabled?: boolean;
-};
+type AdminPortSettingsPayload = { enabled?: boolean; max_leases?: number };
 
 type AdminSnapshotResponse = {
   approval_mode?: ApprovalMode;
   landing_page_enabled?: boolean;
   leases?: AdminLeaseData[];
-  udp?: { enabled: boolean; max_leases: number };
-  tcp_port?: { enabled: boolean; max_leases: number };
+  udp?: AdminPortSettingsPayload;
+  tcp_port?: AdminPortSettingsPayload;
 };
 
-type LeaseActionResult = ApprovalModeResponse;
+type AdminSettingsResponse = Omit<AdminSnapshotResponse, "leases">;
+
+type LeaseActionResult = Record<string, never>;
 
 export interface AdminServer extends BaseServer {
   identityKey: string;
@@ -168,13 +164,13 @@ async function loadAdminSnapshot(): Promise<AdminSnapshot> {
   };
 }
 
-export function useAdmin() {
+export function useAdmin(enabled = true) {
   const [serverData, setServerData] = useState<AdminLeaseData[]>([]);
   const [approvalMode, setApprovalMode] = useState<ApprovalMode>("auto");
   const [landingPageEnabled, setLandingPageEnabled] = useState(true);
   const [udpSettings, setUDPSettings] = useState<UDPSettings>({ enabled: false, maxLeases: 0 });
   const [tcpPortSettings, setTCPPortSettings] = useState<TCPPortSettings>({ enabled: false, maxLeases: 0 });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState("");
 
   const [banFilter, setBanFilter] = useState<BanFilter>("all");
@@ -188,6 +184,9 @@ export function useAdmin() {
   };
 
   const fetchData = async () => {
+    if (!enabled) {
+      return;
+    }
     setError("");
 
     try {
@@ -199,6 +198,15 @@ export function useAdmin() {
 
   useEffect(() => {
     let mounted = true;
+    if (!enabled) {
+      setServerData([]);
+      setLoading(false);
+      setError("");
+      return () => {
+        mounted = false;
+      };
+    }
+
     const loadInitialData = async () => {
       setError("");
       setLoading(true);
@@ -224,7 +232,7 @@ export function useAdmin() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [enabled]);
 
   const servers: AdminServer[] = useMemo(() => {
     return serverData.map((row) => toAdminServer(row));
@@ -324,39 +332,58 @@ export function useAdmin() {
 
   const handleApprovalModeChange = async (mode: ApprovalMode) => {
     await runAdminAction(async () => {
-      const response = await apiClient.post<ApprovalModeResponse>(
-        API_PATHS.admin.approvalMode,
-        { mode }
+      const response = await apiClient.post<AdminSettingsResponse>(
+        API_PATHS.admin.settings,
+        { approval_mode: mode }
       );
       const nextMode = normalizeApprovalMode(response?.approval_mode ?? mode);
       setApprovalMode(nextMode);
     });
   };
 
-  const handleSettingsChange = (path: string, setter: (s: { enabled: boolean; maxLeases: number }) => void) =>
-    async (settings: { enabled: boolean; maxLeases: number }) => {
-      await runAdminAction(async () => {
-        const response = await apiClient.post<{ enabled: boolean; max_leases: number }>(path, {
-          enabled: settings.enabled,
-          max_leases: settings.maxLeases,
-        });
-        setter({
-          enabled: response?.enabled ?? settings.enabled,
-          maxLeases: response?.max_leases ?? settings.maxLeases,
-        });
+  const handleUDPSettingsChange = async (settings: UDPSettings) => {
+    await runAdminAction(async () => {
+      const response = await apiClient.post<AdminSettingsResponse>(
+        API_PATHS.admin.settings,
+        {
+          udp: {
+            enabled: settings.enabled,
+            max_leases: settings.maxLeases,
+          },
+        }
+      );
+      setUDPSettings({
+        enabled: response?.udp?.enabled ?? settings.enabled,
+        maxLeases: response?.udp?.max_leases ?? settings.maxLeases,
       });
-    };
+    });
+  };
 
-  const handleUDPSettingsChange = handleSettingsChange(API_PATHS.admin.udpSettings, setUDPSettings);
-  const handleTCPPortSettingsChange = handleSettingsChange(API_PATHS.admin.tcpPortSettings, setTCPPortSettings);
+  const handleTCPPortSettingsChange = async (settings: TCPPortSettings) => {
+    await runAdminAction(async () => {
+      const response = await apiClient.post<AdminSettingsResponse>(
+        API_PATHS.admin.settings,
+        {
+          tcp_port: {
+            enabled: settings.enabled,
+            max_leases: settings.maxLeases,
+          },
+        }
+      );
+      setTCPPortSettings({
+        enabled: response?.tcp_port?.enabled ?? settings.enabled,
+        maxLeases: response?.tcp_port?.max_leases ?? settings.maxLeases,
+      });
+    });
+  };
 
   const handleLandingPageEnabledChange = async (enabled: boolean) => {
     await runAdminAction(async () => {
-      const response = await apiClient.post<LandingPageSettingsResponse>(
-        API_PATHS.admin.landingPage,
-        { enabled }
+      const response = await apiClient.post<AdminSettingsResponse>(
+        API_PATHS.admin.settings,
+        { landing_page_enabled: enabled }
       );
-      setLandingPageEnabled(response?.enabled ?? enabled);
+      setLandingPageEnabled(response?.landing_page_enabled ?? enabled);
     });
   };
 

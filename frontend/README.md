@@ -31,7 +31,7 @@ frontend/
 │   │   ├── useServerList.ts  # Converts SSR payload into list models
 │   │   ├── useAdmin.ts       # Admin API integration and actions
 │   │   ├── useList.ts        # Shared list filtering/sorting state
-│   │   └── useAuth.ts        # Admin auth helper hooks
+│   │   └── useWalletAuth.ts  # Wallet session and SIWE sign-in
 │   ├── lib/
 │   │   ├── apiClient.ts
 │   │   ├── apiPaths.ts
@@ -39,7 +39,6 @@ frontend/
 │   │   └── utils.ts
 │   ├── pages/
 │   │   ├── Admin.tsx         # Admin area shell
-│   │   ├── AdminLogin.tsx    # Login flow UI
 │   │   ├── ServerDetail.tsx  # Server detail view with page transition
 │   │   └── ServerList.tsx    # Listing pages and route assembly
 │   ├── App.tsx
@@ -134,7 +133,7 @@ Admin address contract:
 
 - `/admin/snapshot` returns `leases` and `approval_mode` in one envelope payload.
 - `leases` rows inside the admin snapshot include the normalized identity `address`; public SSR snapshots omit it.
-- Frontend only Base64URL-encodes addresses when constructing admin action routes (`/admin/leases/{encodedAddress}/{action}`).
+- Frontend Base64URL-encodes lease names and addresses when constructing admin action routes (`/admin/leases/{encodedName}/{encodedAddress}/{action}`).
 
 ### SDK-Related Runtime Contract
 

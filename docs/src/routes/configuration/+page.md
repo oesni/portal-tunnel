@@ -151,7 +151,6 @@ Stores the secp256k1 identity used to sign tunnel sessions and relay descriptors
 | `address` | string | Derived EVM address used for SIWE and identity ownership |
 | `public_key` | string | Compressed secp256k1 public key hex |
 | `private_key` | string | secp256k1 private key hex; keep secret |
-| `admin_secret_key` | string | Relay-only admin login secret, generated automatically when missing |
 | `wireguard_public_key` | string | Relay-only WireGuard overlay public key when discovery is enabled |
 | `wireguard_private_key` | string | Relay-only WireGuard overlay private key when discovery is enabled |
 
@@ -162,6 +161,10 @@ The same identity file or state directory can be reused across restarts to keep 
 Persists admin-panel state for the relay server. Managed automatically by the relay on write; do not edit manually while the server is running.
 
 Relay admin settings are stored at `IDENTITY_PATH/admin_settings.json`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `admin_address` | string | EVM address allowed to access protected admin endpoints with a wallet SIWE session |
 
 ---
 

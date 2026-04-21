@@ -153,7 +153,7 @@ interface ServerListViewProps {
   onBulkApprove?: (identityKeys: string[]) => void | Promise<void>;
   onBulkDeny?: (identityKeys: string[]) => void | Promise<void>;
   onBulkBan?: (identityKeys: string[]) => void | Promise<void>;
-  onLogout?: () => void;
+  onLogout?: () => void | Promise<void>;
 }
 
 function isAdminServer(server: ListServer): server is AdminServer {
@@ -279,13 +279,10 @@ export function ServerListView({
 
   useEffect(() => {
     if (isAdmin) {
-      return;
-    }
-    setSelectedIdentityKeys((prev) => (prev.size === 0 ? prev : new Set()));
-  }, [isAdmin]);
-
-  useEffect(() => {
-    if (isAdmin) {
+      setRelayDiscoveryLoading(false);
+      setRelayReleaseVersions({});
+      setKnownRelays([]);
+      setRelayDiscoveryMessage("");
       return;
     }
     let cancelled = false;

@@ -6,26 +6,28 @@ import { parseLeaseMetadata } from "@/lib/metadata";
 
 export type ClientServer = BaseServer;
 
-function convertSSRDataToServers(ssrData: PublicLeaseData[]): ClientServer[] {
-  return ssrData.map((row) => {
-    const metadata = parseLeaseMetadata(row.Metadata);
-    const hostname = row.Hostname || "";
-    const serviceName = row.name || "";
+export function leaseDataToServer(row: PublicLeaseData): ClientServer {
+  const metadata = parseLeaseMetadata(row.Metadata);
+  const hostname = row.Hostname || "";
+  const serviceName = row.name || "";
 
-    return {
-      id: hostname,
-      name: serviceName || hostname || "(unnamed)",
-      description: metadata.description || "",
-      tags: metadata.tags,
-      thumbnail: metadata.thumbnail || "",
-      owner: metadata.owner || "",
-      online: (row.Ready || 0) > 0,
-      dns: hostname,
-      link: hostname ? `https://${hostname}/` : "",
-      lastUpdated: row.LastSeenAt || undefined,
-      firstSeen: row.FirstSeenAt || undefined,
-    };
-  });
+  return {
+    id: hostname,
+    name: serviceName || hostname || "(unnamed)",
+    description: metadata.description || "",
+    tags: metadata.tags,
+    thumbnail: metadata.thumbnail || "",
+    owner: metadata.owner || "",
+    online: (row.Ready || 0) > 0,
+    dns: hostname,
+    link: hostname ? `https://${hostname}/` : "",
+    lastUpdated: row.LastSeenAt || undefined,
+    firstSeen: row.FirstSeenAt || undefined,
+  };
+}
+
+function convertSSRDataToServers(ssrData: PublicLeaseData[]): ClientServer[] {
+  return ssrData.map(leaseDataToServer);
 }
 
 export function useServerList() {

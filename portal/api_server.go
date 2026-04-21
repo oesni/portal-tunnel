@@ -317,10 +317,10 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	challenge, err := s.registry.consumeVerifiedRegisterChallenge(req)
+	registerReq, err := s.registry.consumeVerifiedLeaseSIWEChallenge(req)
 	if err != nil {
 		switch {
-		case errors.Is(err, auth.ErrRegisterChallengeInvalidSignature):
+		case errors.Is(err, errSIWEChallengeInvalidSignature):
 			utils.WriteAPIError(w, http.StatusForbidden, types.APIErrorCodeUnauthorized, err.Error())
 		default:
 			utils.InvalidRequestError(err).Write(w)
@@ -328,7 +328,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := s.registerLease(challenge.Request, clientIP, req.ReportedIP)
+	resp, err := s.registerLease(registerReq, clientIP, req.ReportedIP)
 	if err != nil {
 		if errors.Is(err, transport.ErrPortExhausted) {
 			utils.WriteAPIError(w, http.StatusServiceUnavailable, types.APIErrorCodeUDPPortExhausted, err.Error())
@@ -350,7 +350,7 @@ func (s *Server) handleRegisterChallenge(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	req, ok := utils.DecodeJSONRequest[types.RegisterChallengeRequest](w, r, defaultControlBodyLimit)
+	req, ok := utils.DecodeJSONRequest[types.SIWEChallengeRequest](w, r, defaultControlBodyLimit)
 	if !ok {
 		return
 	}
@@ -369,21 +369,7 @@ func (s *Server) handleRegisterChallenge(w http.ResponseWriter, r *http.Request)
 		Path:   types.PathSDKRegister,
 	}).String()
 
-	req.HopToken = strings.TrimSpace(req.HopToken)
-	if req.HopToken != "" && s.hopMux == nil {
-		utils.WriteAPIError(w, http.StatusServiceUnavailable, types.APIErrorCodeFeatureUnavailable, errFeatureUnavailable.Error())
-		return
-	}
-	if req.UDPEnabled && (!s.cfg.UDPEnabled || s.group != nil && s.quicTunnel == nil) {
-		utils.WriteAPIError(w, http.StatusServiceUnavailable, types.APIErrorCodeFeatureUnavailable, errFeatureUnavailable.Error())
-		return
-	}
-	if req.TCPEnabled && !s.cfg.TCPEnabled {
-		utils.WriteAPIError(w, http.StatusServiceUnavailable, types.APIErrorCodeFeatureUnavailable, errFeatureUnavailable.Error())
-		return
-	}
-
-	resp, err := s.registry.issueRegisterChallenge(req, domain, registerURI)
+	resp, err := s.registry.issueLeaseSIWEChallenge(req.Address, domain, registerURI)
 	if err != nil {
 		writeAPIErrorResponse(w, err)
 		return
@@ -699,13 +685,20 @@ func (s *Server) admitLeaseByToken(token string, requireDatagram bool) (*leaseRe
 	return lease, nil
 }
 
-func (s *Server) registerLease(req types.RegisterChallengeRequest, clientIP, reportedIP string) (types.RegisterResponse, error) {
+func (s *Server) registerLease(req types.RegisterRequest, clientIP, reportedIP string) (types.RegisterResponse, error) {
 	identity, err := utils.NormalizeIdentity(req.Identity)
 	if err != nil {
 		return types.RegisterResponse{}, err
 	}
 	if s.registry.policy.IPFilter().IsIPBanned(clientIP) {
 		return types.RegisterResponse{}, errIPBanned
+	}
+	req.HopToken = strings.TrimSpace(req.HopToken)
+	if req.HopToken != "" && (req.UDPEnabled || req.TCPEnabled) {
+		return types.RegisterResponse{}, errTransportMismatch
+	}
+	if req.HopToken != "" && s.hopMux == nil {
+		return types.RegisterResponse{}, errFeatureUnavailable
 	}
 	hostname, err := utils.LeaseHostname(identity.Name, s.identity.Name)
 	if err != nil {
@@ -745,10 +738,6 @@ func (s *Server) registerLease(req types.RegisterChallengeRequest, clientIP, rep
 	}
 	issuedAt := claims.IssuedAt.Time().UTC()
 	expiresAt := claims.Expiry.Time().UTC()
-	req.HopToken = strings.TrimSpace(req.HopToken)
-	if req.HopToken != "" && s.hopMux == nil {
-		return types.RegisterResponse{}, errFeatureUnavailable
-	}
 	identityKey := identity.Key()
 	stream := transport.NewRelayStream(identityKey, defaultIdleKeepalive, defaultReadyQueueLimit)
 	record := &leaseRecord{

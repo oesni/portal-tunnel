@@ -57,22 +57,23 @@ func (e *APIRequestError) Is(target error) bool {
 }
 
 type RegisterRequest struct {
-	ChallengeID   string `json:"challenge_id"`
-	SIWEMessage   string `json:"siwe_message"`
-	SIWESignature string `json:"siwe_signature"`
-	ReportedIP    string `json:"reported_ip,omitempty"`
+	ChallengeID   string        `json:"challenge_id"`
+	SIWEMessage   string        `json:"siwe_message"`
+	SIWESignature string        `json:"siwe_signature"`
+	ReportedIP    string        `json:"reported_ip,omitempty"`
+	Identity      Identity      `json:"identity"`
+	Metadata      LeaseMetadata `json:"metadata"`
+	TTL           int           `json:"ttl,omitempty"`
+	UDPEnabled    bool          `json:"udp_enabled,omitempty"`
+	TCPEnabled    bool          `json:"tcp_enabled,omitempty"`
+	HopToken      string        `json:"hop_token,omitempty"`
 }
 
-type RegisterChallengeRequest struct {
-	Identity   Identity      `json:"identity"`
-	Metadata   LeaseMetadata `json:"metadata"`
-	TTL        int           `json:"ttl,omitempty"`
-	UDPEnabled bool          `json:"udp_enabled,omitempty"`
-	TCPEnabled bool          `json:"tcp_enabled,omitempty"`
-	HopToken   string        `json:"hop_token,omitempty"`
+type SIWEChallengeRequest struct {
+	Address string `json:"address"`
 }
 
-type RegisterChallengeResponse struct {
+type SIWEChallengeResponse struct {
 	ChallengeID string    `json:"challenge_id"`
 	ExpiresAt   time.Time `json:"expires_at"`
 	SIWEMessage string    `json:"siwe_message"`
@@ -182,63 +183,45 @@ type TunnelStatusResponse struct {
 	ServiceAlive bool   `json:"service_alive"`
 }
 
-type AdminLoginRequest struct {
-	Key string `json:"key"`
+type AuthSIWEVerifyRequest struct {
+	ChallengeID   string `json:"challenge_id"`
+	SIWEMessage   string `json:"siwe_message"`
+	SIWESignature string `json:"siwe_signature"`
 }
 
-type AdminLoginResponse struct {
-	Success bool `json:"success,omitempty"`
-}
-
-type AdminAuthStatusResponse struct {
-	Authenticated bool `json:"authenticated"`
-	AuthEnabled   bool `json:"auth_enabled"`
+type AuthSessionResponse struct {
+	Authenticated bool   `json:"authenticated"`
+	Address       string `json:"address,omitempty"`
+	IsAdmin       bool   `json:"is_admin,omitempty"`
 }
 
 type AdminSnapshotResponse struct {
-	ApprovalMode       string                       `json:"approval_mode"`
-	LandingPageEnabled bool                         `json:"landing_page_enabled"`
-	Leases             []AdminLease                 `json:"leases,omitempty"`
-	UDP                AdminUDPSettingsResponse     `json:"udp"`
-	TCPPort            AdminTCPPortSettingsResponse `json:"tcp_port"`
+	ApprovalMode       string            `json:"approval_mode"`
+	LandingPageEnabled bool              `json:"landing_page_enabled"`
+	Leases             []AdminLease      `json:"leases,omitempty"`
+	UDP                AdminPortSettings `json:"udp"`
+	TCPPort            AdminPortSettings `json:"tcp_port"`
 }
 
-type AdminApprovalModeRequest struct {
-	Mode string `json:"mode"`
+type AdminSettingsRequest struct {
+	ApprovalMode       string             `json:"approval_mode,omitempty"`
+	LandingPageEnabled *bool              `json:"landing_page_enabled,omitempty"`
+	UDP                *AdminPortSettings `json:"udp,omitempty"`
+	TCPPort            *AdminPortSettings `json:"tcp_port,omitempty"`
 }
 
-type AdminApprovalModeResponse struct {
-	ApprovalMode string `json:"approval_mode"`
-}
-
-type AdminLandingPageSettingsRequest struct {
-	Enabled bool `json:"enabled"`
-}
-
-type AdminLandingPageSettingsResponse struct {
-	Enabled bool `json:"enabled"`
+type AdminSettingsResponse struct {
+	ApprovalMode       string            `json:"approval_mode"`
+	LandingPageEnabled bool              `json:"landing_page_enabled"`
+	UDP                AdminPortSettings `json:"udp"`
+	TCPPort            AdminPortSettings `json:"tcp_port"`
 }
 
 type AdminBPSRequest struct {
 	BPS int64 `json:"bps"`
 }
 
-type AdminUDPSettingsRequest struct {
-	Enabled   bool `json:"enabled"`
-	MaxLeases int  `json:"max_leases"`
-}
-
-type AdminUDPSettingsResponse struct {
-	Enabled   bool `json:"enabled"`
-	MaxLeases int  `json:"max_leases"`
-}
-
-type AdminTCPPortSettingsRequest struct {
-	Enabled   bool `json:"enabled"`
-	MaxLeases int  `json:"max_leases"`
-}
-
-type AdminTCPPortSettingsResponse struct {
+type AdminPortSettings struct {
 	Enabled   bool `json:"enabled"`
 	MaxLeases int  `json:"max_leases"`
 }

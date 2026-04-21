@@ -1,7 +1,6 @@
 package types
 
 const (
-	APIErrorCodeAuthDisabled            = "auth_disabled"
 	APIErrorCodeFeatureUnavailable      = "feature_unavailable"
 	APIErrorCodeHijackFailed            = "hijack_failed"
 	APIErrorCodeHijackUnsupported       = "hijack_unsupported"
@@ -10,7 +9,6 @@ const (
 	APIErrorCodeInvalidAddress          = "invalid_address"
 	APIErrorCodeInvalidIP               = "invalid_ip"
 	APIErrorCodeInvalidJSON             = "invalid_json"
-	APIErrorCodeInvalidKey              = "invalid_key"
 	APIErrorCodeInvalidMode             = "invalid_mode"
 	APIErrorCodeInvalidRequest          = "invalid_request"
 	APIErrorCodeInternal                = "internal"
@@ -19,7 +17,6 @@ const (
 	APIErrorCodeLeaseRejected           = "lease_rejected"
 	APIErrorCodeMethodNotAllowed        = "method_not_allowed"
 	APIErrorCodeRateLimited             = "rate_limited"
-	APIErrorCodeSessionCreateFailed     = "session_create_failed"
 	APIErrorCodeUnauthorized            = "unauthorized"
 	APIErrorCodeUDPPortExhausted        = "udp_port_exhausted"
 	APIErrorCodeUDPDisabled             = "udp_disabled"

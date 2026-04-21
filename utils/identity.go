@@ -190,7 +190,6 @@ func NormalizeStoredRelayIdentity(identity types.RelayIdentity) (types.RelayIden
 		return types.RelayIdentity{}, err
 	}
 	normalized.Identity = baseIdentity
-	normalized.AdminSecretKey = strings.TrimSpace(normalized.AdminSecretKey)
 	normalized.WireGuardPublicKey = strings.TrimSpace(normalized.WireGuardPublicKey)
 	normalized.WireGuardPrivateKey = strings.TrimSpace(normalized.WireGuardPrivateKey)
 
@@ -231,7 +230,6 @@ type storedIdentity struct {
 
 type storedRelayIdentity struct {
 	storedIdentity
-	AdminSecretKey      string `json:"admin_secret_key,omitempty"`
 	WireGuardPublicKey  string `json:"wireguard_public_key,omitempty"`
 	WireGuardPrivateKey string `json:"wireguard_private_key,omitempty"`
 }
@@ -272,7 +270,6 @@ func SaveRelayIdentity(path string, identity types.RelayIdentity) error {
 			PublicKey:  normalized.PublicKey,
 			PrivateKey: normalized.PrivateKey,
 		},
-		AdminSecretKey:      normalized.AdminSecretKey,
 		WireGuardPublicKey:  normalized.WireGuardPublicKey,
 		WireGuardPrivateKey: normalized.WireGuardPrivateKey,
 	}, 0o600); err != nil {
@@ -314,7 +311,6 @@ func LoadRelayIdentity(path string) (types.RelayIdentity, error) {
 			PublicKey:  payload.PublicKey,
 			PrivateKey: payload.PrivateKey,
 		},
-		AdminSecretKey:      payload.AdminSecretKey,
 		WireGuardPublicKey:  payload.WireGuardPublicKey,
 		WireGuardPrivateKey: payload.WireGuardPrivateKey,
 	})
@@ -461,14 +457,6 @@ func LoadOrCreateRelayIdentity(path, rootHost string, discoveryEnabled bool) (ty
 func populateRelayIdentity(identity *types.RelayIdentity, discoveryEnabled bool) error {
 	if identity == nil {
 		return errors.New("relay identity is required")
-	}
-
-	if strings.TrimSpace(identity.AdminSecretKey) == "" {
-		adminSecretKey, err := identity.Identity.DeriveToken("admin-secret")
-		if err != nil {
-			return fmt.Errorf("derive relay admin secret key: %w", err)
-		}
-		identity.AdminSecretKey = adminSecretKey
 	}
 
 	if discoveryEnabled && strings.TrimSpace(identity.WireGuardPrivateKey) == "" {

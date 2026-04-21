@@ -264,7 +264,7 @@ Result: this is a detect-only signal by default. It raises the cost of adaptive 
 
 ### TCP Port Transport (non-TLS)
 
-1. SDK/tunnel requests a register challenge with `tcp_enabled=true`, signs the returned SIWE message, and completes registration.
+1. SDK/tunnel requests a SIWE challenge, signs the returned message, and completes registration with `tcp_enabled=true`.
 2. Relay validates that the TCP port plane is enabled, allocates a TCP port, and creates a per-lease TCP listener.
 3. Registration response includes `tcp_addr` (public TCP endpoint).
 4. An external TCP client connects to `tcp_addr`.
@@ -278,7 +278,7 @@ Result: the relay allocates a dedicated TCP port per lease and bridges raw TCP w
 
 ### UDP/QUIC Datagram Transport
 
-1. SDK/tunnel requests a register challenge with `udp_enabled=true`, signs the returned SIWE message, and completes registration.
+1. SDK/tunnel requests a SIWE challenge, signs the returned message, and completes registration with `udp_enabled=true`.
 2. Relay validates that the datagram plane is enabled, allocates a UDP port, and creates a per-lease datagram runtime.
 3. Registration response includes `udp_addr`, `access_token`, and `sni_port`. The SDK dials QUIC to the relay on `sni_port`.
 4. SDK opens a QUIC connection with ALPN `portal-tunnel` and DATAGRAM support enabled.

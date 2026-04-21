@@ -1,6 +1,7 @@
 import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggleButton } from "@/components/ThemeToggleButton";
+import { WalletButton } from "@/components/WalletButton";
 import {
   Tooltip,
   TooltipContent,
@@ -12,7 +13,7 @@ import { getReleaseVersion } from "@/lib/releaseVersion";
 interface HeaderProps {
   title?: string;
   isAdmin?: boolean;
-  onLogout?: () => void;
+  onLogout?: () => void | Promise<void>;
   showQuickStartLink?: boolean;
 }
 
@@ -85,6 +86,8 @@ export function Header({
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center gap-2 sm:gap-3">
+        {!isAdmin && <WalletButton onLogout={onLogout} />}
+
         {!isAdmin && (
           <a
             href={repoURL}
@@ -114,7 +117,9 @@ export function Header({
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={onLogout}
+                  onClick={() => {
+                    void onLogout();
+                  }}
                   className="h-12 w-12 cursor-pointer rounded-full border-border/70 bg-background/90 text-foreground shadow-sm transition-all hover:-translate-y-0.5 hover:border-destructive/40 hover:bg-background hover:text-destructive"
                   aria-label="Logout"
                 >

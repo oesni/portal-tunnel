@@ -228,7 +228,7 @@ func TestRegisterLeaseOmitsSNIPortWithoutUDP(t *testing.T) {
 		t.Fatalf("NewServer() error = %v", err)
 	}
 
-	resp, err := server.registerLease(types.RegisterChallengeRequest{
+	resp, err := server.registerLease(types.RegisterRequest{
 		Identity: types.Identity{
 			Name:    "demo-tcp",
 			Address: server.identity.Address,
@@ -326,7 +326,7 @@ func TestRegisterLeaseDerivesFixedHostnameFromName(t *testing.T) {
 		t.Fatalf("NewServer() error = %v", err)
 	}
 
-	resp, err := server.registerLease(types.RegisterChallengeRequest{
+	resp, err := server.registerLease(types.RegisterRequest{
 		Identity: types.Identity{
 			Name:    "Demo-App",
 			Address: server.identity.Address,
@@ -369,7 +369,7 @@ func TestRegisterLeaseBuildsUDPEnabledRuntime(t *testing.T) {
 	}
 	server.registry.policy.SetUDPPolicy(true, 0)
 
-	resp, err := server.registerLease(types.RegisterChallengeRequest{
+	resp, err := server.registerLease(types.RegisterRequest{
 		Identity: types.Identity{
 			Name:    "demo-udp",
 			Address: server.identity.Address,

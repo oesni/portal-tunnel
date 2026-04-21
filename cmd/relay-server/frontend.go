@@ -34,7 +34,7 @@ var embeddedDistFS embed.FS
 type Frontend struct {
 	distFS            readDirFileFS
 	server            *portal.Server
-	auth              *adminAuth
+	adminAddress      string
 	adminSettingsPath string
 	thumbnails        *thumbnailService
 
@@ -59,16 +59,20 @@ func NewFrontend(server *portal.Server, identityPath string, defaultLandingPageE
 	if err != nil {
 		return nil, err
 	}
-	identity := server.RelayIdentity()
-	auth, err := newAdminAuth(identity.AdminSecretKey)
-	if err != nil {
-		return nil, err
+	adminAddress := strings.TrimSpace(state.AdminAddress)
+	if adminAddress == "" {
+		adminAddress = strings.TrimSpace(server.RelayIdentity().Address)
 	}
-
+	if adminAddress != "" {
+		adminAddress, err = utils.NormalizeEVMAddress(adminAddress)
+		if err != nil {
+			return nil, err
+		}
+	}
 	frontend := &Frontend{
 		distFS:            embeddedDistFS,
 		server:            server,
-		auth:              auth,
+		adminAddress:      adminAddress,
 		adminSettingsPath: strings.TrimSpace(adminSettingsPath),
 		thumbnails:        newThumbnailService(headlessShellURL),
 	}
@@ -103,6 +107,7 @@ func (f *Frontend) Handler() *http.ServeMux {
 
 	mux.HandleFunc(types.PathAdmin, f.serveAdmin)
 	mux.HandleFunc(types.PathAdminPrefix, f.serveAdmin)
+	mux.HandleFunc(types.PathAuthPrefix, f.serveAuth)
 	mux.HandleFunc(types.PathTunnelStatus, f.serveTunnelStatus)
 	mux.HandleFunc(types.PathThumbnailPrefix, f.serveThumbnail)
 	mux.HandleFunc(types.PathInstallShell, func(w http.ResponseWriter, r *http.Request) {

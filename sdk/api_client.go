@@ -145,14 +145,17 @@ func (l *listener) registerLease(ctx context.Context, ttl time.Duration, udpEnab
 		exitHopToken = previousHopToken
 	}
 
-	var challenge types.RegisterChallengeResponse
-	if err := utils.HTTPDoAPIPath(ctx, l.httpClient, l.relayURL, http.MethodPost, types.PathSDKRegisterChallenge, types.RegisterChallengeRequest{
+	registerReq := types.RegisterRequest{
 		Identity:   l.identity,
 		Metadata:   l.metadata,
 		TTL:        int(ttl / time.Second),
 		UDPEnabled: udpEnabled,
 		TCPEnabled: tcpEnabled,
 		HopToken:   exitHopToken,
+	}
+	var challenge types.SIWEChallengeResponse
+	if err := utils.HTTPDoAPIPath(ctx, l.httpClient, l.relayURL, http.MethodPost, types.PathSDKRegisterChallenge, types.SIWEChallengeRequest{
+		Address: l.identity.Address,
 	}, nil, &challenge); err != nil {
 		return types.RegisterResponse{}, nil, err
 	}
@@ -163,12 +166,11 @@ func (l *listener) registerLease(ctx context.Context, ttl time.Duration, udpEnab
 	}
 
 	var resp types.RegisterResponse
-	if err := utils.HTTPDoAPIPath(ctx, l.httpClient, l.relayURL, http.MethodPost, types.PathSDKRegister, types.RegisterRequest{
-		ChallengeID:   challenge.ChallengeID,
-		SIWEMessage:   challenge.SIWEMessage,
-		SIWESignature: signature,
-		ReportedIP:    utils.ResolvePublicIP(ctx),
-	}, nil, &resp); err != nil {
+	registerReq.ChallengeID = challenge.ChallengeID
+	registerReq.SIWEMessage = challenge.SIWEMessage
+	registerReq.SIWESignature = signature
+	registerReq.ReportedIP = utils.ResolvePublicIP(ctx)
+	if err := utils.HTTPDoAPIPath(ctx, l.httpClient, l.relayURL, http.MethodPost, types.PathSDKRegister, registerReq, nil, &resp); err != nil {
 		return types.RegisterResponse{}, nil, err
 	}
 	if len(hopRoutes) > 0 {

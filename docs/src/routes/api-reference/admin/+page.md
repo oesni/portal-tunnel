@@ -9,9 +9,10 @@ import Mermaid from '$lib/components/Mermaid.svelte'
 const adminWorkflowDiagram = `sequenceDiagram
     participant Admin
     participant Relay as Portal Relay
-    Admin->>Relay: POST /admin/login
-    Note right of Admin: secret key in body
-    Relay->>Admin: Set-Cookie session token
+    Admin->>Relay: POST /auth/siwe/challenge
+    Relay->>Admin: SIWE message
+    Admin->>Relay: POST /auth/siwe/verify
+    Relay->>Admin: Set-Cookie portal_session
     Admin->>Relay: GET /admin/snapshot
     Relay->>Admin: Full relay state
     Note left of Relay: leases, settings, bans
@@ -20,16 +21,16 @@ const adminWorkflowDiagram = `sequenceDiagram
         Relay->>Admin: OK
     end
     alt Configure Settings
-        Admin->>Relay: POST /admin/settings/approval-mode
+        Admin->>Relay: POST /admin/settings
         Relay->>Admin: Updated settings
     end
-    Admin->>Relay: POST /admin/logout
-    Relay->>Admin: Session cleared`
+    Admin->>Relay: POST /auth/logout
+    Relay->>Admin: Wallet session cleared`
 </script>
 
 # Admin API
 
-These endpoints allow relay operators to manage leases, configure settings, and control access. All endpoints (except authentication) require a valid admin session cookie.
+These endpoints allow relay operators to manage leases, configure settings, and control access. Protected admin endpoints require a wallet session whose address matches the relay admin address.
 
 ## Admin Workflow
 
@@ -39,109 +40,7 @@ These endpoints allow relay operators to manage leases, configure settings, and 
 
 ## Authentication
 
-### `POST /admin/login`
-
-Authenticate with the admin secret key. On success, sets a session cookie used for all subsequent admin requests.
-
-**Auth:** None
-
-**Request body:**
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `key` | `string` | Yes | Admin secret key |
-
-**Response fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `success` | `bool` | `true` on successful login |
-
-**Response cookies:**
-
-| Cookie | Value | Attributes |
-|--------|-------|------------|
-| `portal_admin` | Session token | `Path=/admin; HttpOnly; Secure; SameSite=Strict; MaxAge=86400` |
-
-**Error codes:**
-
-| Code | Status | Description |
-|------|--------|-------------|
-| `auth_disabled` | 503 | Admin authentication is not configured |
-| `invalid_key` | 401 | Incorrect secret key |
-
-**Example:**
-
-```bash
-curl -X POST https://relay.example.com/admin/login \
-  -H "Content-Type: application/json" \
-  -c cookies.txt \
-  -d '{ "key": "my-secret-key" }'
-```
-
-**Response:**
-
-```json
-{
-  "ok": true,
-  "data": {
-    "success": true
-  }
-}
-```
-
----
-
-### `POST /admin/logout`
-
-End the current admin session and clear the session cookie.
-
-**Auth:** Session Cookie
-
-**Request body:** None
-
-**Response:** Empty data object.
-
-**Example:**
-
-```bash
-curl -X POST https://relay.example.com/admin/logout \
-  -b cookies.txt
-```
-
----
-
-### `GET /admin/auth/status`
-
-Check the current authentication status. Can be called without a session to determine whether admin auth is enabled.
-
-**Auth:** None (returns status regardless)
-
-**Response fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `authenticated` | `bool` | `true` if the request has a valid session |
-| `auth_enabled` | `bool` | `true` if admin auth is configured |
-
-**Example:**
-
-```bash
-curl https://relay.example.com/admin/auth/status \
-  -b cookies.txt
-```
-
-**Response:**
-
-```json
-{
-  "ok": true,
-  "data": {
-    "authenticated": true,
-    "auth_enabled": true
-  }
-}
-```
+Admin uses the wallet SIWE session from `/auth/*`. A wallet is an admin only when its address matches `admin_address` in `IDENTITY_PATH/admin_settings.json`.
 
 ---
 
@@ -151,7 +50,7 @@ curl https://relay.example.com/admin/auth/status \
 
 Get a full snapshot of the relay's current state including all active leases, approval mode, and transport settings.
 
-**Auth:** Session Cookie
+**Auth:** Admin Wallet Session
 
 **Response fields:**
 
@@ -231,140 +130,51 @@ curl https://relay.example.com/admin/snapshot \
 
 ## Settings
 
-### `POST /admin/settings/landing-page`
+### `POST /admin/settings`
 
-Enable or disable the relay landing page.
+Update relay settings. Fields are optional; omitted fields keep their current values.
 
-**Auth:** Session Cookie
-
-**Request body:**
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `enabled` | `bool` | Yes | `true` to enable, `false` to disable |
-
-**Response fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `enabled` | `bool` | Current landing page state |
-
-**Example:**
-
-```bash
-curl -X POST https://relay.example.com/admin/settings/landing-page \
-  -H "Content-Type: application/json" \
-  -b cookies.txt \
-  -d '{ "enabled": true }'
-```
-
----
-
-### `POST /admin/settings/udp`
-
-Configure UDP (QUIC) transport settings.
-
-**Auth:** Session Cookie
+**Auth:** Admin Wallet Session
 
 **Request body:**
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `enabled` | `bool` | Yes | Enable or disable UDP transport |
-| `max_leases` | `int` | Yes | Maximum concurrent UDP leases (0 = unlimited) |
-
-**Response fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `enabled` | `bool` | Current UDP enabled state |
-| `max_leases` | `int` | Current max leases value |
-
-**Error codes:**
-
-| Code | Status | Description |
-|------|--------|-------------|
-| `invalid_request` | 400 | `max_leases` must be non-negative |
-
-**Example:**
-
-```bash
-curl -X POST https://relay.example.com/admin/settings/udp \
-  -H "Content-Type: application/json" \
-  -b cookies.txt \
-  -d '{ "enabled": true, "max_leases": 10 }'
-```
-
----
-
-### `POST /admin/settings/tcp-port`
-
-Configure dedicated TCP port transport settings.
-
-**Auth:** Session Cookie
-
-**Request body:**
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `enabled` | `bool` | Yes | Enable or disable TCP port transport |
-| `max_leases` | `int` | Yes | Maximum concurrent TCP port leases (0 = unlimited) |
-
-**Response fields:**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `enabled` | `bool` | Current TCP port enabled state |
-| `max_leases` | `int` | Current max leases value |
-
-**Error codes:**
-
-| Code | Status | Description |
-|------|--------|-------------|
-| `invalid_request` | 400 | `max_leases` must be non-negative |
-
-**Example:**
-
-```bash
-curl -X POST https://relay.example.com/admin/settings/tcp-port \
-  -H "Content-Type: application/json" \
-  -b cookies.txt \
-  -d '{ "enabled": true, "max_leases": 5 }'
-```
-
----
-
-### `POST /admin/settings/approval-mode`
-
-Set the lease approval mode. In `auto` mode, all leases are automatically approved. In `manual` mode, leases must be explicitly approved before they can route traffic.
-
-**Auth:** Session Cookie
-
-**Request body:**
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `mode` | `string` | Yes | `"auto"` or `"manual"` |
+| `approval_mode` | `string` | No | `"auto"` or `"manual"` |
+| `landing_page_enabled` | `bool` | No | Show or hide the relay landing page |
+| `udp.enabled` | `bool` | No | Enable or disable UDP transport |
+| `udp.max_leases` | `int` | No | Maximum concurrent UDP leases (0 = unlimited) |
+| `tcp_port.enabled` | `bool` | No | Enable or disable TCP port transport |
+| `tcp_port.max_leases` | `int` | No | Maximum concurrent TCP port leases (0 = unlimited) |
 
 **Response fields:**
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `approval_mode` | `string` | Current approval mode |
+| `landing_page_enabled` | `bool` | Current landing page state |
+| `udp` | `object` | Current UDP settings |
+| `tcp_port` | `object` | Current TCP port settings |
 
 **Error codes:**
 
 | Code | Status | Description |
 |------|--------|-------------|
 | `invalid_mode` | 400 | Mode must be `"auto"` or `"manual"` |
+| `invalid_request` | 400 | `max_leases` must be non-negative |
 
 **Example:**
 
 ```bash
-curl -X POST https://relay.example.com/admin/settings/approval-mode \
+curl -X POST https://relay.example.com/admin/settings \
   -H "Content-Type: application/json" \
   -b cookies.txt \
-  -d '{ "mode": "manual" }'
+  -d '{
+    "approval_mode": "manual",
+    "landing_page_enabled": true,
+    "udp": { "enabled": true, "max_leases": 10 },
+    "tcp_port": { "enabled": false, "max_leases": 0 }
+  }'
 ```
 
 **Response:**
@@ -373,7 +183,10 @@ curl -X POST https://relay.example.com/admin/settings/approval-mode \
 {
   "ok": true,
   "data": {
-    "approval_mode": "manual"
+    "approval_mode": "manual",
+    "landing_page_enabled": true,
+    "udp": { "enabled": true, "max_leases": 10 },
+    "tcp_port": { "enabled": false, "max_leases": 0 }
   }
 }
 ```
@@ -396,7 +209,7 @@ All lease management endpoints return an empty data object on success. All chang
 
 Ban or unban a lease identity. Banned identities cannot register new leases or renew existing ones.
 
-**Auth:** Session Cookie
+**Auth:** Admin Wallet Session
 
 | Method | Description |
 |--------|-------------|
@@ -421,7 +234,7 @@ curl -X DELETE https://relay.example.com/admin/leases/bXktYXBw/MHgxMjM0/ban \
 
 Set or remove a bandwidth limit (bytes per second) for a specific lease identity.
 
-**Auth:** Session Cookie
+**Auth:** Admin Wallet Session
 
 | Method | Description |
 |--------|-------------|
@@ -460,7 +273,7 @@ curl -X DELETE https://relay.example.com/admin/leases/bXktYXBw/MHgxMjM0/bps \
 
 Approve or revoke approval for a lease identity. Only relevant when approval mode is `manual`.
 
-**Auth:** Session Cookie
+**Auth:** Admin Wallet Session
 
 | Method | Description |
 |--------|-------------|
@@ -485,7 +298,7 @@ curl -X DELETE https://relay.example.com/admin/leases/bXktYXBw/MHgxMjM0/approve 
 
 Deny or remove denial for a lease identity. Denied identities are blocked from routing even in `auto` mode.
 
-**Auth:** Session Cookie
+**Auth:** Admin Wallet Session
 
 | Method | Description |
 |--------|-------------|
@@ -512,7 +325,7 @@ curl -X DELETE https://relay.example.com/admin/leases/bXktYXBw/MHgxMjM0/deny \
 
 Ban or unban an IP address. Banned IPs are rejected at the SDK registration and renewal endpoints.
 
-**Auth:** Session Cookie
+**Auth:** Admin Wallet Session
 
 | Method | Description |
 |--------|-------------|

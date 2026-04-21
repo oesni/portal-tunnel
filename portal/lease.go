@@ -15,7 +15,13 @@ import (
 	"github.com/gosuda/portal-tunnel/v2/utils"
 )
 
-const defaultRegisterChallengeTTL = 2 * time.Minute
+const defaultLeaseSIWEChallengeTTL = 2 * time.Minute
+
+var (
+	errSIWEChallengeExpired          = errors.New("siwe challenge expired")
+	errSIWEChallengeNotFound         = errors.New("siwe challenge not found")
+	errSIWEChallengeInvalidSignature = errors.New("siwe signature is invalid")
+)
 
 type leaseRegistry struct {
 	records []*leaseRecord
@@ -372,74 +378,68 @@ func (r *leaseRegistry) DeleteHopRoute(route *types.HopRoute) *leaseRecord {
 	return deleted
 }
 
-func (r *leaseRegistry) issueRegisterChallenge(req types.RegisterChallengeRequest, domain, uri string) (types.RegisterChallengeResponse, error) {
-	if strings.TrimSpace(req.HopToken) != "" && (req.UDPEnabled || req.TCPEnabled) {
-		return types.RegisterChallengeResponse{}, errTransportMismatch
-	}
-	if req.UDPEnabled {
-		if !r.policy.IsUDPEnabled() {
-			return types.RegisterChallengeResponse{}, errUDPDisabled
-		}
-		if max := r.policy.UDPMaxLeases(); max > 0 && r.countDatagramLeases() >= max {
-			return types.RegisterChallengeResponse{}, errUDPCapacityExceeded
-		}
-	}
-	if req.TCPEnabled {
-		if !r.policy.IsTCPPortEnabled() {
-			return types.RegisterChallengeResponse{}, errTCPPortDisabled
-		}
-		if max := r.policy.TCPPortMaxLeases(); max > 0 && r.countTCPPortLeases() >= max {
-			return types.RegisterChallengeResponse{}, errTCPPortCapacityExceeded
-		}
-	}
-
+func (r *leaseRegistry) issueLeaseSIWEChallenge(address, domain, uri string) (types.SIWEChallengeResponse, error) {
 	now := time.Now().UTC()
-	challenge, err := auth.NewRegisterChallenge(req, domain, uri, now, defaultRegisterChallengeTTL)
+	challenge, err := auth.NewSIWEChallenge(address, domain, uri, "Register a portal lease", now, defaultLeaseSIWEChallengeTTL)
 	if err != nil {
-		return types.RegisterChallengeResponse{}, err
+		return types.SIWEChallengeResponse{}, err
 	}
 
 	r.mu.Lock()
 	r.records = append(r.records, &leaseRecord{
-		ExpiresAt:         challenge.ExpiresAt,
-		registerChallenge: challenge,
+		ExpiresAt:     challenge.ExpiresAt,
+		siweChallenge: challenge,
 	})
 	r.mu.Unlock()
 
-	return types.RegisterChallengeResponse{
+	return types.SIWEChallengeResponse{
 		ChallengeID: challenge.ChallengeID,
 		ExpiresAt:   challenge.ExpiresAt,
-		SIWEMessage: challenge.SIWEMessage,
+		SIWEMessage: challenge.Message,
 	}, nil
 }
 
-func (r *leaseRegistry) consumeVerifiedRegisterChallenge(req types.RegisterRequest) (*auth.RegisterChallenge, error) {
+func (r *leaseRegistry) consumeVerifiedLeaseSIWEChallenge(req types.RegisterRequest) (types.RegisterRequest, error) {
 	challengeID := strings.TrimSpace(req.ChallengeID)
 	if challengeID == "" {
-		return nil, auth.ErrRegisterChallengeNotFound
+		return types.RegisterRequest{}, errSIWEChallengeNotFound
 	}
+	var err error
+	req.Identity, err = utils.NormalizeIdentity(req.Identity)
+	if err != nil {
+		return types.RegisterRequest{}, err
+	}
+	req.Metadata = req.Metadata.Copy()
+	req.HopToken = strings.TrimSpace(req.HopToken)
 
 	now := time.Now().UTC()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	for i, record := range r.records {
-		if record == nil || record.registerChallenge == nil || record.registerChallenge.ChallengeID != challengeID {
+		if record == nil || record.siweChallenge.ChallengeID != challengeID {
 			continue
 		}
-		challenge := record.registerChallenge
-		if challenge.Expired(now) {
+		challenge := record.siweChallenge
+		if now.After(challenge.ExpiresAt) {
 			r.deleteRecord(i)
-			return nil, auth.ErrRegisterChallengeExpired
+			return types.RegisterRequest{}, errSIWEChallengeExpired
 		}
-		if err := challenge.Verify(req, now); err != nil {
-			return nil, err
+		if strings.TrimSpace(req.SIWEMessage) != challenge.Message {
+			return types.RegisterRequest{}, errors.New("siwe message does not match challenge")
+		}
+		verified, err := auth.VerifySIWEMessage(challenge.Message, req.SIWESignature, now)
+		if err != nil {
+			return types.RegisterRequest{}, errSIWEChallengeInvalidSignature
+		}
+		if !strings.EqualFold(verified.Address, req.Identity.Address) {
+			return types.RegisterRequest{}, errSIWEChallengeInvalidSignature
 		}
 
 		r.deleteRecord(i)
-		return challenge, nil
+		return req, nil
 	}
-	return nil, auth.ErrRegisterChallengeNotFound
+	return types.RegisterRequest{}, errSIWEChallengeNotFound
 }
 
 func (r *leaseRegistry) Touch(key, clientIP string, now time.Time) {
@@ -559,6 +559,25 @@ func (r *leaseRegistry) AdminLeases(now time.Time) []types.AdminLease {
 	return leases
 }
 
+func (r *leaseRegistry) AccountLeases(address string, now time.Time) []types.Lease {
+	normalizedAddress, err := utils.NormalizeEVMAddress(address)
+	if err != nil {
+		return nil
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	leases := make([]types.Lease, 0, len(r.records))
+	for _, record := range r.records {
+		if record == nil || record.stream == nil || record.isExpired(now) || !strings.EqualFold(record.Address, normalizedAddress) {
+			continue
+		}
+		leases = append(leases, r.publicLease(record))
+	}
+	return leases
+}
+
 func (r *leaseRegistry) deleteRecord(i int) {
 	last := len(r.records) - 1
 	r.records[i] = r.records[last]
@@ -605,7 +624,7 @@ type leaseRecord struct {
 	hopToken           string
 	hopNextOverlayIPv4 string
 	hopNextToken       string
-	registerChallenge  *auth.RegisterChallenge
+	siweChallenge      auth.SIWEChallenge
 
 	datagram  *transport.RelayDatagram
 	udpPorts  *transport.PortAllocator
