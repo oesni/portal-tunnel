@@ -8,11 +8,14 @@ import {
 } from "wagmi";
 import { API_PATHS } from "@/lib/apiPaths";
 import { APIClientError, apiClient } from "@/lib/apiClient";
+import { compactAddress, normalizeAddress } from "@/lib/address";
 
 interface AuthSessionPayload {
   authenticated?: boolean;
   address?: string;
+  relay_address?: string;
   is_admin?: boolean;
+  is_relay_owner?: boolean;
 }
 
 interface AuthSIWEChallengePayload {
@@ -23,21 +26,21 @@ interface AuthSIWEChallengePayload {
 interface WalletSession {
   authenticated: boolean;
   address: string;
+  relayAddress: string;
   isAdmin: boolean;
+  isRelayOwner: boolean;
 }
 
 const emptySession: WalletSession = {
   authenticated: false,
   address: "",
+  relayAddress: "",
   isAdmin: false,
+  isRelayOwner: false,
 };
 
 const walletProviderMissingMessage =
   "No browser wallet found. Install or enable an Ethereum wallet, then retry.";
-
-function normalizeAddress(value: string | undefined): string {
-  return typeof value === "string" ? value.trim() : "";
-}
 
 function sameAddress(a: string | undefined, b: string | undefined): boolean {
   const left = normalizeAddress(a).toLowerCase();
@@ -46,7 +49,29 @@ function sameAddress(a: string | undefined, b: string | undefined): boolean {
 }
 
 function walletLabel(address: string): string {
-  return address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "";
+  return compactAddress(address, 6, 4);
+}
+
+function toWalletSession(
+  data: AuthSessionPayload | undefined,
+  fallbackAddress = "",
+  fallbackRelayAddress = ""
+): WalletSession {
+  const address = normalizeAddress(data?.address || fallbackAddress);
+  const relayAddress = normalizeAddress(
+    data?.relay_address || fallbackRelayAddress
+  );
+  const authenticated = data?.authenticated === true && address !== "";
+  const isRelayOwner =
+    authenticated &&
+    (data?.is_relay_owner === true || sameAddress(address, relayAddress));
+  return {
+    authenticated,
+    address,
+    relayAddress,
+    isAdmin: data?.is_admin === true,
+    isRelayOwner,
+  };
 }
 
 function toWalletError(error: unknown): string {
@@ -145,12 +170,7 @@ async function waitForInjectedProvider(): Promise<void> {
 
 async function loadSession(): Promise<WalletSession> {
   const data = await apiClient.get<AuthSessionPayload>(API_PATHS.auth.session);
-  const address = normalizeAddress(data?.address);
-  return {
-    authenticated: data?.authenticated === true && address !== "",
-    address,
-    isAdmin: data?.is_admin === true,
-  };
+  return toWalletSession(data);
 }
 
 export function useWalletAuth() {
@@ -167,10 +187,14 @@ export function useWalletAuth() {
   const walletAddress = normalizeAddress(connection.address);
   const sessionAddress = normalizeAddress(session.address);
   const address = walletAddress || sessionAddress;
+  const relayAddress = normalizeAddress(session.relayAddress);
   const isAuthenticated =
     session.authenticated &&
     sessionAddress !== "" &&
     (walletAddress === "" || sameAddress(sessionAddress, walletAddress));
+  const isRelayOwner =
+    isAuthenticated &&
+    (session.isRelayOwner || sameAddress(sessionAddress, relayAddress));
 
   useEffect(() => {
     let mounted = true;
@@ -239,11 +263,7 @@ export function useWalletAuth() {
           siwe_signature: signature,
         }
       );
-      setSession({
-        authenticated: verified?.authenticated === true,
-        address: normalizeAddress(verified?.address || signerAddress),
-        isAdmin: verified?.is_admin === true,
-      });
+      setSession(toWalletSession(verified, signerAddress, session.relayAddress));
     } catch (err: unknown) {
       const message = toWalletError(err);
       setError(message);
@@ -265,20 +285,27 @@ export function useWalletAuth() {
     } catch {
       // Wallet may already be disconnected.
     }
-    setSession(emptySession);
+    setSession((prev) => ({
+      ...emptySession,
+      relayAddress: prev.relayAddress,
+    }));
   };
 
   const label = useMemo(() => walletLabel(address), [address]);
+  const relayLabel = useMemo(() => walletLabel(relayAddress), [relayAddress]);
 
   return {
     address,
     error,
     isAuthenticated,
-    isAdmin: isAuthenticated && session.isAdmin,
+    isAdmin: isAuthenticated && (session.isAdmin || isRelayOwner),
     isLoading:
       isSessionLoading || connection.isConnecting || connection.isReconnecting,
     isSigningIn,
+    isRelayOwner,
     label,
+    relayAddress,
+    relayLabel,
     signIn,
     logout,
   };

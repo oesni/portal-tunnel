@@ -30,7 +30,7 @@ const adminWorkflowDiagram = `sequenceDiagram
 
 # Admin API
 
-These endpoints allow relay operators to manage leases, configure settings, and control access. Protected admin endpoints require a wallet session whose address matches the relay admin address.
+These endpoints allow relay operators to manage leases, configure settings, and control access. Protected admin endpoints require a wallet session whose address matches the relay identity address.
 
 ## Admin Workflow
 
@@ -40,7 +40,7 @@ These endpoints allow relay operators to manage leases, configure settings, and 
 
 ## Authentication
 
-Admin uses the wallet SIWE session from `/auth/*`. A wallet is an admin only when its address matches `admin_address` in `IDENTITY_PATH/admin_settings.json`.
+Admin uses the wallet SIWE session from `/auth/*`. A wallet is an admin when its address matches the relay identity address.
 
 ---
 

@@ -8,6 +8,7 @@ export interface BaseServer {
   tags: string[];
   thumbnail: string;
   owner: string;
+  address?: string;
   online: boolean;
   dns: string;
   link: string;

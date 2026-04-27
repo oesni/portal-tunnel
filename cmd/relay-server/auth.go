@@ -16,10 +16,13 @@ import (
 )
 
 const (
-	adminBodyLimit   = 1 << 16
-	walletCookieName = "portal_session"
-	walletCookieTTL  = 24 * time.Hour
+	adminBodyLimit     = 1 << 16
+	walletCookieName   = "portal_session"
+	walletChallengeTTL = 5 * time.Minute
+	walletCookieTTL    = 24 * time.Hour
 )
+
+type walletChallenge = portalauth.SIWEChallenge
 
 func (f *Frontend) serveAuth(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimSuffix(strings.TrimSpace(r.URL.Path), "/")
@@ -53,11 +56,12 @@ func (f *Frontend) serveAuth(w http.ResponseWriter, r *http.Request) {
 			Path:   types.PathAuthSIWEVerify,
 		}).String()
 
-		challenge, err := portalauth.NewSIWEChallenge(req.Address, domain, uri, "Sign in to Portal", time.Now().UTC(), walletCookieTTL)
+		challenge, err := portalauth.NewSIWEChallenge(req.Address, domain, uri, "Sign in to Portal", time.Now().UTC(), walletChallengeTTL)
 		if err != nil {
 			utils.WriteAPIError(w, http.StatusBadRequest, types.APIErrorCodeInvalidAddress, err.Error())
 			return
 		}
+		f.storeWalletChallenge(challenge)
 		utils.WriteAPIData(w, http.StatusCreated, types.SIWEChallengeResponse{
 			ChallengeID: challenge.ChallengeID,
 			ExpiresAt:   challenge.ExpiresAt,
@@ -77,12 +81,18 @@ func (f *Frontend) serveAuth(w http.ResponseWriter, r *http.Request) {
 			utils.WriteAPIError(w, http.StatusUnauthorized, types.APIErrorCodeUnauthorized, "challenge id is required")
 			return
 		}
-		siweMessage := strings.TrimSpace(req.SIWEMessage)
-		if siweMessage == "" {
+		now := time.Now().UTC()
+		challenge, ok := f.loadWalletChallenge(challengeID, now)
+		if !ok {
 			utils.WriteAPIError(w, http.StatusUnauthorized, types.APIErrorCodeUnauthorized, "challenge not found")
 			return
 		}
-		verified, err := portalauth.VerifySIWEMessage(siweMessage, req.SIWESignature, time.Now().UTC())
+		siweMessage := strings.TrimSpace(req.SIWEMessage)
+		if siweMessage == "" || siweMessage != challenge.Message {
+			utils.WriteAPIError(w, http.StatusUnauthorized, types.APIErrorCodeUnauthorized, "challenge not found")
+			return
+		}
+		verified, err := portalauth.VerifySIWEMessage(challenge.Message, req.SIWESignature, now)
 		if err != nil {
 			utils.WriteAPIError(w, http.StatusUnauthorized, types.APIErrorCodeUnauthorized, err.Error())
 			return
@@ -91,6 +101,7 @@ func (f *Frontend) serveAuth(w http.ResponseWriter, r *http.Request) {
 			utils.WriteAPIError(w, http.StatusUnauthorized, types.APIErrorCodeUnauthorized, "challenge not found")
 			return
 		}
+		f.deleteWalletChallenge(challengeID)
 		signature := strings.TrimSpace(req.SIWESignature)
 		http.SetCookie(w, &http.Cookie{
 			Name:     walletCookieName,
@@ -101,25 +112,17 @@ func (f *Frontend) serveAuth(w http.ResponseWriter, r *http.Request) {
 			SameSite: http.SameSiteStrictMode,
 			MaxAge:   int(walletCookieTTL / time.Second),
 		})
-		utils.WriteAPIData(w, http.StatusOK, types.AuthSessionResponse{
-			Authenticated: true,
-			Address:       verified.Address,
-			IsAdmin:       f.isAdminWallet(verified.Address),
-		})
+		utils.WriteAPIData(w, http.StatusOK, f.authSessionResponse(true, verified.Address))
 	case types.PathAuthSession:
 		if !utils.RequireMethod(w, r, http.MethodGet) {
 			return
 		}
 		address, ok := f.currentWalletAddress(r)
 		if !ok {
-			utils.WriteAPIData(w, http.StatusOK, types.AuthSessionResponse{Authenticated: false})
+			utils.WriteAPIData(w, http.StatusOK, f.authSessionResponse(false, ""))
 			return
 		}
-		utils.WriteAPIData(w, http.StatusOK, types.AuthSessionResponse{
-			Authenticated: true,
-			Address:       address,
-			IsAdmin:       f.isAdminWallet(address),
-		})
+		utils.WriteAPIData(w, http.StatusOK, f.authSessionResponse(true, address))
 	case types.PathAuthLogout:
 		if !utils.RequireMethod(w, r, http.MethodPost) {
 			return
@@ -168,7 +171,7 @@ func (f *Frontend) serveAdmin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	address, ok := f.currentWalletAddress(r)
-	if !ok || !f.isAdminWallet(address) {
+	if !ok || !f.isRelayWallet(address) {
 		utils.WriteAPIError(w, http.StatusUnauthorized, types.APIErrorCodeUnauthorized, "unauthorized")
 		return
 	}
@@ -379,6 +382,61 @@ func (f *Frontend) currentWalletAddress(r *http.Request) (string, bool) {
 	return verified.Address, err == nil
 }
 
+func (f *Frontend) authSessionResponse(authenticated bool, address string) types.AuthSessionResponse {
+	address = strings.TrimSpace(address)
+	relayAddress := strings.TrimSpace(f.relayAddress)
+	relayOwner := authenticated && f.isRelayWallet(address)
+	return types.AuthSessionResponse{
+		Authenticated: authenticated,
+		Address:       address,
+		RelayAddress:  relayAddress,
+		IsAdmin:       relayOwner,
+		IsRelayOwner:  relayOwner,
+	}
+}
+
+func (f *Frontend) storeWalletChallenge(challenge walletChallenge) {
+	if f == nil || challenge.ChallengeID == "" {
+		return
+	}
+	now := time.Now().UTC()
+	f.walletChallengeMu.Lock()
+	defer f.walletChallengeMu.Unlock()
+	if f.walletChallenges == nil {
+		f.walletChallenges = make(map[string]walletChallenge)
+	}
+	f.cleanupExpiredWalletChallengesLocked(now)
+	f.walletChallenges[challenge.ChallengeID] = challenge
+}
+
+func (f *Frontend) loadWalletChallenge(challengeID string, now time.Time) (walletChallenge, bool) {
+	if f == nil || strings.TrimSpace(challengeID) == "" {
+		return walletChallenge{}, false
+	}
+	f.walletChallengeMu.Lock()
+	defer f.walletChallengeMu.Unlock()
+	f.cleanupExpiredWalletChallengesLocked(now)
+	challenge, ok := f.walletChallenges[strings.TrimSpace(challengeID)]
+	return challenge, ok
+}
+
+func (f *Frontend) deleteWalletChallenge(challengeID string) {
+	if f == nil || strings.TrimSpace(challengeID) == "" {
+		return
+	}
+	f.walletChallengeMu.Lock()
+	defer f.walletChallengeMu.Unlock()
+	delete(f.walletChallenges, strings.TrimSpace(challengeID))
+}
+
+func (f *Frontend) cleanupExpiredWalletChallengesLocked(now time.Time) {
+	for challengeID, challenge := range f.walletChallenges {
+		if now.After(challenge.ExpiresAt) {
+			delete(f.walletChallenges, challengeID)
+		}
+	}
+}
+
 func walletCookieSecure(r *http.Request) bool {
 	if r == nil {
 		return false
@@ -389,12 +447,16 @@ func walletCookieSecure(r *http.Request) bool {
 	return strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https")
 }
 
-func (f *Frontend) isAdminWallet(address string) bool {
-	if f == nil || strings.TrimSpace(f.adminAddress) == "" {
+func (f *Frontend) isRelayWallet(address string) bool {
+	if f == nil {
+		return false
+	}
+	relayAddress := strings.TrimSpace(f.relayAddress)
+	if relayAddress == "" {
 		return false
 	}
 	normalized, err := utils.NormalizeEVMAddress(address)
-	return err == nil && normalized == f.adminAddress
+	return err == nil && normalized == relayAddress
 }
 
 func (f *Frontend) saveAdminState(runtime *policy.Runtime) {
@@ -424,7 +486,6 @@ func (f *Frontend) saveAdminState(runtime *policy.Runtime) {
 		TCPPortEnabled:       &tcpPortEnabled,
 		TCPPortMaxLeases:     &tcpPortMaxLeases,
 		LandingPageEnabled:   &landingPageEnabled,
-		AdminAddress:         f.adminAddress,
 	}
 	_ = utils.WriteJSONFile(path, payload, 0o600)
 }
@@ -491,5 +552,4 @@ type persistedAdminState struct {
 	TCPPortEnabled       *bool            `json:"tcp_port_enabled,omitempty"`
 	TCPPortMaxLeases     *int             `json:"tcp_port_max_leases,omitempty"`
 	LandingPageEnabled   *bool            `json:"landing_page_enabled,omitempty"`
-	AdminAddress         string           `json:"admin_address,omitempty"`
 }

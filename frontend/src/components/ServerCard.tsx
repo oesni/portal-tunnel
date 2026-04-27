@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import clsx from "clsx";
+import { Check, Copy, Fingerprint } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -10,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { compactAddress, normalizeAddress } from "@/lib/address";
 
 interface ServerCardProps {
   serverId: string;
@@ -66,7 +68,7 @@ export function ServerCard({
   onToggleFavorite,
   showAdminControls = false,
   identityKey,
-  address: _address,
+  address = "",
   isBanned = false,
   isApproved = false,
   isDenied = false,
@@ -84,6 +86,9 @@ export function ServerCard({
 }: ServerCardProps) {
   const [showBPSModal, setShowBPSModal] = useState(false);
   const [bpsInput, setBpsInput] = useState(bps.toString());
+  const [addressCopied, setAddressCopied] = useState(false);
+  const identityAddress = normalizeAddress(address);
+  const displayAddress = compactAddress(identityAddress);
 
   const bpsSteps = [0, 10, 100, 1000, 10000, 100000, 1000000, 10000000];
 
@@ -176,6 +181,22 @@ export function ServerCard({
     setShowBPSModal(true);
   };
 
+  const handleAddressCopy = async (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!identityAddress) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(identityAddress);
+      setAddressCopied(true);
+      window.setTimeout(() => setAddressCopied(false), 1600);
+    } catch (error) {
+      console.error("Failed to copy tunnel address", error);
+    }
+  };
+
   const handleBPSSave = () => {
     if (identityKey) {
       const newBps = parseInt(bpsInput, 10) || 0;
@@ -229,7 +250,7 @@ export function ServerCard({
       data-hero-key={`server-bg-${serverId}`}
       className={clsx(
         "relative w-full overflow-hidden rounded-3xl group border border-white/10 shadow-lg",
-        showAdminControls ? "h-71.5" : "h-[174.5px]"
+        showAdminControls ? "h-80" : "h-56"
       )}
     >
       <div
@@ -350,6 +371,33 @@ export function ServerCard({
                 <span className="text-[10px] font-medium text-white/50">
                   by {owner}
                 </span>
+              )}
+              {displayAddress && (
+                <div
+                  className="mt-0.5 flex max-w-full items-center gap-1.5 rounded-lg border border-white/10 bg-black/35 px-2 py-1 text-white/70 backdrop-blur-sm"
+                  title={identityAddress}
+                >
+                  <Fingerprint className="h-3 w-3 shrink-0 text-primary" />
+                  <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.16em] text-white/45">
+                    Tunnel identity
+                  </span>
+                  <span className="min-w-0 flex-1 truncate font-mono text-[11px] font-semibold text-white/80">
+                    {displayAddress}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAddressCopy}
+                    className="flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-white/55 transition-colors hover:bg-white/10 hover:text-primary"
+                    aria-label="Copy tunnel address"
+                    title={addressCopied ? "Copied" : "Copy tunnel address"}
+                  >
+                    {addressCopied ? (
+                      <Check className="h-3 w-3 text-primary" />
+                    ) : (
+                      <Copy className="h-3 w-3" />
+                    )}
+                  </button>
+                </div>
               )}
             </div>
 

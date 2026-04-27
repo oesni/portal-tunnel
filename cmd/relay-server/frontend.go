@@ -34,9 +34,11 @@ var embeddedDistFS embed.FS
 type Frontend struct {
 	distFS            readDirFileFS
 	server            *portal.Server
-	adminAddress      string
+	relayAddress      string
 	adminSettingsPath string
 	thumbnails        *thumbnailService
+	walletChallenges  map[string]walletChallenge
+	walletChallengeMu sync.Mutex
 
 	cachedPortalHTML     []byte
 	cachedPortalHTMLOnce sync.Once
@@ -59,12 +61,9 @@ func NewFrontend(server *portal.Server, identityPath string, defaultLandingPageE
 	if err != nil {
 		return nil, err
 	}
-	adminAddress := strings.TrimSpace(state.AdminAddress)
-	if adminAddress == "" {
-		adminAddress = strings.TrimSpace(server.RelayIdentity().Address)
-	}
-	if adminAddress != "" {
-		adminAddress, err = utils.NormalizeEVMAddress(adminAddress)
+	relayAddress := strings.TrimSpace(server.RelayIdentity().Address)
+	if relayAddress != "" {
+		relayAddress, err = utils.NormalizeEVMAddress(relayAddress)
 		if err != nil {
 			return nil, err
 		}
@@ -72,9 +71,10 @@ func NewFrontend(server *portal.Server, identityPath string, defaultLandingPageE
 	frontend := &Frontend{
 		distFS:            embeddedDistFS,
 		server:            server,
-		adminAddress:      adminAddress,
+		relayAddress:      relayAddress,
 		adminSettingsPath: strings.TrimSpace(adminSettingsPath),
 		thumbnails:        newThumbnailService(headlessShellURL),
+		walletChallenges:  make(map[string]walletChallenge),
 	}
 	landingPageEnabled := defaultLandingPageEnabled
 	if state.LandingPageEnabled != nil {
@@ -328,10 +328,17 @@ func (f *Frontend) injectOGMetadata(htmlContent, title, description string) stri
 	if description == "" {
 		description = "Transform your local services into web-accessible endpoints. Instant access from anywhere."
 	}
+	ogImage := "/portal.jpg"
+	if f != nil && f.server != nil {
+		if portalURL := strings.TrimRight(strings.TrimSpace(f.server.PortalURL()), "/"); portalURL != "" {
+			ogImage = portalURL + ogImage
+		}
+	}
 
 	replacer := strings.NewReplacer(
 		"[%OG_TITLE%]", html.EscapeString(title),
 		"[%OG_DESCRIPTION%]", html.EscapeString(description),
+		"[%OG_IMAGE%]", html.EscapeString(ogImage),
 		"[%LANDING_PAGE_ENABLED%]", html.EscapeString(strconv.FormatBool(f.isLandingPageEnabled())),
 		"[%RELEASE_VERSION%]", html.EscapeString(types.ReleaseVersion),
 	)
@@ -374,6 +381,7 @@ func frontendRootAssetPaths() []string {
 		"/favicon.ico",
 		"/favicon.svg",
 		"/favicon-96x96.png",
+		"/portal.jpg",
 		"/apple-touch-icon.png",
 		"/web-app-manifest-192x192.png",
 		"/web-app-manifest-512x512.png",

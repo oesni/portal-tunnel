@@ -1,15 +1,26 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { SsgoiTransition } from "@ssgoi/react";
-import { Loader2, ShieldCheck, Wallet } from "lucide-react";
+import {
+  Check,
+  Copy,
+  Loader2,
+  ShieldCheck,
+  Wallet,
+} from "lucide-react";
 import { Header } from "@/components/Header";
 import { useAdmin } from "@/hooks/useAdmin";
 import { useWalletAuth } from "@/hooks/useWalletAuth";
 import { ServerListView } from "@/components/ServerListView";
+import { compactAddress, normalizeAddress } from "@/lib/address";
 
 export function Admin() {
   const navigate = useNavigate();
   const wallet = useWalletAuth();
   const loadAdmin = !wallet.isLoading && wallet.isAdmin;
+  const relayIdentityAddress = normalizeAddress(wallet.relayAddress);
+  const relayIdentityLabel = compactAddress(relayIdentityAddress);
+  const [relayAddressCopied, setRelayAddressCopied] = useState(false);
 
   const admin = useAdmin(loadAdmin);
 
@@ -29,6 +40,46 @@ export function Admin() {
     }
   };
 
+  const handleRelayAddressCopy = async () => {
+    if (!relayIdentityAddress) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(relayIdentityAddress);
+      setRelayAddressCopied(true);
+      window.setTimeout(() => setRelayAddressCopied(false), 1600);
+    } catch (error) {
+      console.error("Failed to copy relay address", error);
+    }
+  };
+
+  const relayIdentityPanel = relayIdentityAddress ? (
+    <div className="w-full rounded-lg border border-border/70 bg-secondary/50 px-3 py-3 text-left">
+      <div className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-text-muted">
+        <span className="font-mono text-primary">{relayIdentityLabel}</span>
+      </div>
+      <div className="flex min-w-0 items-center gap-2">
+        <code className="min-w-0 flex-1 break-all font-mono text-xs text-foreground">
+          {relayIdentityAddress}
+        </code>
+        <button
+          type="button"
+          onClick={handleRelayAddressCopy}
+          className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-text-muted transition-colors hover:bg-background/70 hover:text-primary"
+          aria-label="Copy relay address"
+          title={relayAddressCopied ? "Copied" : "Copy relay address"}
+        >
+          {relayAddressCopied ? (
+            <Check className="h-3.5 w-3.5 text-primary" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
+        </button>
+      </div>
+    </div>
+  ) : null;
+
   if (wallet.isLoading) {
     return <div className="p-8 text-foreground">Checking authentication...</div>;
   }
@@ -43,7 +94,11 @@ export function Admin() {
           <div className="flex h-full grow flex-col">
             <div className="flex flex-1 justify-center py-5">
               <div className="flex w-full max-w-6xl flex-1 flex-col px-4 md:px-8">
-                <Header title="PORTAL ADMIN" isAdmin={true} />
+                <Header
+                  title="PORTAL ADMIN"
+                  isAdmin={true}
+                  relayAddress={wallet.relayAddress}
+                />
 
                 <main className="flex flex-1 flex-col items-center justify-center py-16">
                   <div className="flex w-full max-w-md flex-col items-center gap-6 rounded-xl bg-card p-8 text-center shadow-lg">
@@ -63,9 +118,10 @@ export function Admin() {
                     {accessDenied ? (
                       <>
                         <p className="text-sm text-text-muted">
-                          {wallet.label || wallet.address} is not the
-                          configured admin wallet.
+                          {wallet.label || wallet.address} is not authorized
+                          for this relay.
                         </p>
+                        {relayIdentityPanel}
                         <button
                           type="button"
                           onClick={() => {
@@ -97,6 +153,8 @@ export function Admin() {
                             {wallet.error}
                           </div>
                         )}
+
+                        {relayIdentityPanel}
                       </>
                     )}
                   </div>
@@ -152,6 +210,7 @@ export function Admin() {
         onBulkDeny={admin.handleBulkDeny}
         onBulkBan={admin.handleBulkBan}
         onLogout={handleLogout}
+        relayAddress={wallet.relayAddress}
       />
     </SsgoiTransition>
   );

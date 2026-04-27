@@ -1,4 +1,5 @@
-import { BadgeCheck, Loader2, LogOut, Wallet } from "lucide-react";
+import { BadgeCheck, Loader2, LogOut, ShieldCheck, Wallet } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -16,6 +17,7 @@ export function WalletButton({ onLogout }: WalletButtonProps) {
   const wallet = useWalletAuth();
   const busy = wallet.isLoading || wallet.isSigningIn;
   const signedIn = wallet.isAuthenticated && wallet.address !== "";
+  const relaySignedIn = signedIn && wallet.isRelayOwner;
   const label = signedIn ? wallet.label : "Wallet";
 
   const handleClick = () => {
@@ -37,8 +39,10 @@ export function WalletButton({ onLogout }: WalletButtonProps) {
 
   const tooltip = wallet.error
     ? wallet.error
-    : signedIn
-      ? "Wallet connected"
+    : relaySignedIn
+      ? "Relay wallet connected"
+      : signedIn
+        ? "Wallet connected"
       : "Connect wallet";
 
   return (
@@ -57,6 +61,8 @@ export function WalletButton({ onLogout }: WalletButtonProps) {
             >
               {busy ? (
                 <Loader2 className="h-4.5 w-4.5 animate-spin" />
+              ) : relaySignedIn ? (
+                <ShieldCheck className="h-4.5 w-4.5 text-primary" />
               ) : signedIn ? (
                 <BadgeCheck className="h-4.5 w-4.5 text-primary" />
               ) : (
@@ -69,10 +75,40 @@ export function WalletButton({ onLogout }: WalletButtonProps) {
           </TooltipTrigger>
           <TooltipContent>
             <p>{tooltip}</p>
+            {signedIn && wallet.address && (
+              <p className="text-xs text-text-muted">Wallet {wallet.label}</p>
+            )}
+            {wallet.relayAddress && (
+              <p className="text-xs text-text-muted">
+                Relay {wallet.relayLabel}
+              </p>
+            )}
           </TooltipContent>
         </Tooltip>
 
         {signedIn && (
+          <>
+            {wallet.isAdmin && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="icon"
+                    className="h-12 w-12 cursor-pointer rounded-full border-border/70 bg-background/90 text-foreground shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:bg-background hover:text-primary"
+                    aria-label="Open admin"
+                  >
+                    <Link to="/admin">
+                      <ShieldCheck className="h-4.5 w-4.5" />
+                    </Link>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Open admin</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -91,6 +127,7 @@ export function WalletButton({ onLogout }: WalletButtonProps) {
               <p>Sign out wallet</p>
             </TooltipContent>
           </Tooltip>
+          </>
         )}
       </div>
     </TooltipProvider>

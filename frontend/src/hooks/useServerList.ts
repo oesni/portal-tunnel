@@ -18,6 +18,7 @@ export function leaseDataToServer(row: PublicLeaseData): ClientServer {
     tags: metadata.tags,
     thumbnail: metadata.thumbnail || "",
     owner: metadata.owner || "",
+    address: row.address?.trim() || "",
     online: (row.Ready || 0) > 0,
     dns: hostname,
     link: hostname ? `https://${hostname}/` : "",

@@ -38,6 +38,10 @@ interface RelayDiscoveryResponse {
   relays?: RelayDiscoveryDescriptor[];
 }
 
+interface AuthSessionResponse {
+  relay_address?: string;
+}
+
 interface KnownRelay {
   relayURL: string;
   isCurrent: boolean;
@@ -154,10 +158,11 @@ interface ServerListViewProps {
   onBulkDeny?: (identityKeys: string[]) => void | Promise<void>;
   onBulkBan?: (identityKeys: string[]) => void | Promise<void>;
   onLogout?: () => void | Promise<void>;
+  relayAddress?: string;
 }
 
 function isAdminServer(server: ListServer): server is AdminServer {
-  return "address" in server;
+  return "identityKey" in server;
 }
 
 function toAdminServer(server: ListServer): AdminServer | undefined {
@@ -198,6 +203,7 @@ export function ServerListView({
   onBulkDeny,
   onBulkBan,
   onLogout,
+  relayAddress = "",
 }: ServerListViewProps) {
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [relayReleaseVersions, setRelayReleaseVersions] = useState<
@@ -208,6 +214,7 @@ export function ServerListView({
     () => !isAdmin
   );
   const [relayDiscoveryMessage, setRelayDiscoveryMessage] = useState("");
+  const [currentRelayAddress, setCurrentRelayAddress] = useState("");
   const [selectedIdentityKeys, setSelectedIdentityKeys] = useState<Set<string>>(
     new Set()
   );
@@ -215,6 +222,7 @@ export function ServerListView({
   const favoriteIds = useMemo(() => new Set(favorites), [favorites]);
   const showLandingHero = !isAdmin && landingPageEnabled;
   const currentRelayURL = useMemo(() => readCurrentOrigin(), []);
+  const headerRelayAddress = relayAddress || currentRelayAddress;
 
   const handleToggleSelect = (identityKey: string) => {
     setSelectedIdentityKeys((prev) => {
@@ -306,29 +314,61 @@ export function ServerListView({
         discoveryMessage = "Known relay data is unavailable on this relay.";
       }
 
-      const relayURLs = nextKnownRelays.map((relay) => relay.relayURL);
-      const uniqueRelayURLs = [...new Set(relayURLs)];
-      const versions = await Promise.all(
-        uniqueRelayURLs.map(async (relayURL) => [
-          relayURL,
-          await loadRelayReleaseVersion(relayURL),
-        ] as const)
-      );
-
       if (cancelled) {
         return;
       }
 
-      setRelayReleaseVersions(Object.fromEntries(versions));
       setKnownRelays(nextKnownRelays);
       setRelayDiscoveryLoading(false);
       setRelayDiscoveryMessage(discoveryMessage);
+
+      const relayURLs = [
+        ...new Set(nextKnownRelays.map((relay) => relay.relayURL)),
+      ];
+      relayURLs.forEach((relayURL) => {
+        void (async () => {
+          const version = await loadRelayReleaseVersion(relayURL);
+          if (cancelled) {
+            return;
+          }
+
+          setRelayReleaseVersions((prev) => ({
+            ...prev,
+            [relayURL]: version || "offline",
+          }));
+        })();
+      });
     })();
 
     return () => {
       cancelled = true;
     };
   }, [currentRelayURL, isAdmin]);
+
+  useEffect(() => {
+    if (isAdmin) {
+      setCurrentRelayAddress("");
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const session = await apiClient.get<AuthSessionResponse>(
+          API_PATHS.auth.session
+        );
+        if (!cancelled) {
+          setCurrentRelayAddress(session?.relay_address?.trim() || "");
+        }
+      } catch {
+        if (!cancelled) {
+          setCurrentRelayAddress("");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin]);
   const isAllSelected =
     allIdentityKeys.length > 0 &&
     allIdentityKeys.every((identityKey) => selectedIdentityKeys.has(identityKey));
@@ -599,6 +639,7 @@ export function ServerListView({
           tags: server.tags,
           thumbnail: server.thumbnail,
           owner: server.owner,
+          address: server.address,
           online: server.online,
           serverUrl: server.link,
         }}
@@ -607,7 +648,7 @@ export function ServerListView({
         onToggleFavorite={onToggleFavorite}
         showAdminControls={isAdmin && !!adminServer}
         identityKey={adminServer?.identityKey}
-        address={adminServer?.address}
+        address={server.address}
         isBanned={adminServer?.isBanned}
         isApproved={adminServer?.isApproved}
         isDenied={adminServer?.isDenied}
@@ -695,7 +736,12 @@ export function ServerListView({
           <>
             <div className="sticky top-0 z-10 w-full bg-background pb-4 pt-5">
               <div className="flex w-full flex-col px-4 sm:px-6 lg:px-8">
-                <Header title={title} isAdmin={isAdmin} onLogout={onLogout} />
+                <Header
+                  title={title}
+                  isAdmin={isAdmin}
+                  relayAddress={headerRelayAddress}
+                  onLogout={onLogout}
+                />
                 <div className="flex items-center gap-2">
                   <div className="flex-1">{searchBar}</div>
                 </div>
@@ -761,6 +807,7 @@ export function ServerListView({
                 <Header
                   title={title}
                   isAdmin={isAdmin}
+                  relayAddress={headerRelayAddress}
                   onLogout={onLogout}
                   showQuickStartLink={landingPageEnabled}
                 />
@@ -858,17 +905,19 @@ export function ServerListView({
                             key={relay.relayURL}
                             className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/90 px-4 py-3"
                           >
-                            <a
-                              href={relay.relayURL}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[13px] text-foreground underline-offset-4 hover:underline sm:text-sm"
-                            >
-                              {relay.relayURL}
-                            </a>
+                            <div className="min-w-0 flex-1">
+                              <a
+                                href={relay.relayURL}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[13px] text-foreground underline-offset-4 hover:underline sm:text-sm"
+                              >
+                                {relay.relayURL}
+                              </a>
+                            </div>
                             <div className="flex shrink-0 items-center gap-2">
                               <span className="rounded-full bg-background px-2.5 py-1 font-mono text-[11px] font-medium text-text-muted ring-1 ring-border">
-                                {relayReleaseVersions[relay.relayURL] || "offline"}
+                                {relayReleaseVersions[relay.relayURL] || "checking..."}
                               </span>
                             </div>
                           </div>

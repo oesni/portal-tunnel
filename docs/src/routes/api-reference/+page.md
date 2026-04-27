@@ -63,7 +63,7 @@ Browser clients authenticate with a wallet SIWE session:
 3. POST the signed message to `/auth/siwe/verify`
 4. The server sets a `portal_session` cookie for subsequent wallet requests
 
-Admin access is wallet-native. Protected `/admin` endpoints require the current wallet session address to match `admin_address` in the relay admin settings.
+Admin access is wallet-native. Protected `/admin` endpoints require the current wallet session address to match the relay identity address.
 
 ## Endpoint Summary
 
@@ -99,7 +99,7 @@ Admin access is wallet-native. Protected `/admin` endpoints require the current 
 
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
-| `GET` | `/auth/session` | Get current wallet session status | Wallet Session optional |
+| `GET` | `/auth/session` | Get current wallet and relay session status | Wallet Session optional |
 | `POST` | `/auth/logout` | Clear current wallet session | Wallet Session optional |
 | `GET` | `/auth/leases` | List leases owned by current wallet | Wallet Session |
 | `POST` | `/auth/siwe/challenge` | Request a browser-wallet SIWE challenge | None |

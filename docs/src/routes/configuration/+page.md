@@ -162,11 +162,7 @@ The same identity file or state directory can be reused across restarts to keep 
 
 Persists admin-panel state for the relay server. Managed automatically by the relay on write; do not edit manually while the server is running.
 
-Relay admin settings are stored at `IDENTITY_PATH/admin_settings.json`.
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `admin_address` | string | EVM address allowed to access protected admin endpoints with a wallet SIWE session |
+Relay admin settings are stored at `IDENTITY_PATH/admin_settings.json`. Admin wallet access is derived from the relay identity address in `IDENTITY_PATH/identity.json`.
 
 ---
 

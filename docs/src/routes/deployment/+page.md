@@ -293,6 +293,7 @@ Notes:
 - Portal uses the `PORTAL_URL` host for public lease hostnames
 - `IDENTITY_PATH` stores the relay state directory inside the container
 - Portal stores `identity.json`, `admin_settings.json`, `fullchain.pem`, and `privatekey.pem` under `IDENTITY_PATH`
+- The relay identity address in `identity.json` is the admin wallet address for `/admin`
 - The Docker Compose stack stores relay state under `./.portal-certs` on the host
 
 Discovery settings:

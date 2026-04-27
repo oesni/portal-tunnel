@@ -1,4 +1,5 @@
-import { LogOut } from "lucide-react";
+import { Check, Copy, LogOut } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggleButton } from "@/components/ThemeToggleButton";
 import { WalletButton } from "@/components/WalletButton";
@@ -8,11 +9,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { compactAddress, normalizeAddress } from "@/lib/address";
 import { getReleaseVersion } from "@/lib/releaseVersion";
 
 interface HeaderProps {
   title?: string;
   isAdmin?: boolean;
+  relayAddress?: string;
   onLogout?: () => void | Promise<void>;
   showQuickStartLink?: boolean;
 }
@@ -22,10 +25,28 @@ const repoURL = "https://github.com/gosuda/portal-tunnel";
 export function Header({
   title = "PORTAL",
   isAdmin,
+  relayAddress = "",
   onLogout,
   showQuickStartLink = true,
 }: HeaderProps) {
   const releaseVersion = getReleaseVersion();
+  const relayIdentityAddress = normalizeAddress(relayAddress);
+  const displayRelayAddress = compactAddress(relayIdentityAddress);
+  const [relayAddressCopied, setRelayAddressCopied] = useState(false);
+
+  const handleRelayAddressCopy = async () => {
+    if (!relayIdentityAddress) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(relayIdentityAddress);
+      setRelayAddressCopied(true);
+      window.setTimeout(() => setRelayAddressCopied(false), 1600);
+    } catch (error) {
+      console.error("Failed to copy relay address", error);
+    }
+  };
 
   return (
     <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 py-2 lg:flex-nowrap">
@@ -55,6 +76,29 @@ export function Header({
                 <span className="inline-flex h-6 items-center rounded-full bg-secondary px-2.5 text-xs font-semibold text-text-muted">
                   {releaseVersion}
                 </span>
+              )}
+              {displayRelayAddress && (
+                <div
+                  className="inline-flex h-9 min-w-0 max-w-full items-center gap-2 rounded-full border border-primary/25 bg-primary/10 pl-3 pr-1 text-primary shadow-sm sm:max-w-80"
+                  title={relayIdentityAddress}
+                >
+                  <span className="min-w-0 max-w-36 truncate font-mono text-xs font-semibold text-foreground sm:max-w-44">
+                    {displayRelayAddress}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleRelayAddressCopy}
+                    className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-text-muted transition-colors hover:bg-background/70 hover:text-primary"
+                    aria-label="Copy relay address"
+                    title={relayAddressCopied ? "Copied" : "Copy relay address"}
+                  >
+                    {relayAddressCopied ? (
+                      <Check className="h-3.5 w-3.5 text-primary" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </div>
               )}
             </div>
           </div>

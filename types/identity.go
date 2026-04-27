@@ -101,6 +101,7 @@ func (m LeaseMetadata) Copy() LeaseMetadata {
 
 type Lease struct {
 	Name        string `json:"name,omitempty"`
+	Address     string `json:"address,omitempty"`
 	ExpiresAt   time.Time
 	FirstSeenAt time.Time
 	LastSeenAt  time.Time
@@ -115,7 +116,6 @@ type Lease struct {
 type AdminLease struct {
 	Lease
 	IdentityKey string `json:"identity_key,omitempty"`
-	Address     string `json:"address,omitempty"`
 	BPS         int64
 	ClientIP    string
 	ReportedIP  string

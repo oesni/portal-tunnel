@@ -193,7 +193,9 @@ type AuthSIWEVerifyRequest struct {
 type AuthSessionResponse struct {
 	Authenticated bool   `json:"authenticated"`
 	Address       string `json:"address,omitempty"`
+	RelayAddress  string `json:"relay_address,omitempty"`
 	IsAdmin       bool   `json:"is_admin,omitempty"`
+	IsRelayOwner  bool   `json:"is_relay_owner,omitempty"`
 }
 
 type AdminSnapshotResponse struct {

@@ -550,7 +550,6 @@ func (r *leaseRegistry) AdminLeases(now time.Time) []types.AdminLease {
 		leases = append(leases, types.AdminLease{
 			Lease:       r.publicLease(record),
 			IdentityKey: identityKey,
-			Address:     record.Address,
 			BPS:         r.policy.BPSManager().IdentityBPS(identityKey),
 			ClientIP:    clientIP,
 			ReportedIP:  record.ReportedIP,
@@ -592,6 +591,7 @@ func (r *leaseRegistry) deleteRecord(i int) {
 func (r *leaseRegistry) publicLease(record *leaseRecord) types.Lease {
 	lease := types.Lease{
 		Name:        record.Name,
+		Address:     record.Address,
 		ExpiresAt:   record.ExpiresAt,
 		FirstSeenAt: record.FirstSeenAt,
 		LastSeenAt:  record.LastSeenAt,

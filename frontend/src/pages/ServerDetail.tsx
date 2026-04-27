@@ -1,6 +1,8 @@
 import { SsgoiTransition } from "@ssgoi/react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { Check, Copy, Fingerprint } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { compactAddress, normalizeAddress } from "@/lib/address";
 
 interface ServerDetailState {
   id: number;
@@ -9,6 +11,7 @@ interface ServerDetailState {
   tags: string[];
   thumbnail: string;
   owner: string;
+  address?: string;
   online: boolean;
   serverUrl: string;
 }
@@ -17,6 +20,7 @@ export function ServerDetail() {
   const location = useLocation();
   const navigate = useNavigate();
   const server = location.state as ServerDetailState;
+  const [addressCopied, setAddressCopied] = useState(false);
 
   // Detect back navigation using pageshow event
   useEffect(() => {
@@ -70,7 +74,24 @@ export function ServerDetail() {
     return null;
   }
 
-  const { id, thumbnail, name, online, description, tags, owner } = server;
+  const { id, thumbnail, name, online, description, tags, owner, address } =
+    server;
+  const identityAddress = normalizeAddress(address);
+  const displayAddress = compactAddress(identityAddress, 10, 8);
+
+  const handleAddressCopy = async () => {
+    if (!identityAddress) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(identityAddress);
+      setAddressCopied(true);
+      window.setTimeout(() => setAddressCopied(false), 1600);
+    } catch (error) {
+      console.error("Failed to copy tunnel address", error);
+    }
+  };
 
   // Base size multiplier (1 = default, 2 = 2x size)
   const basicSize = 2.5;
@@ -158,6 +179,38 @@ export function ServerDetail() {
                   >
                     by {owner}
                   </p>
+                )}
+                {identityAddress && (
+                  <div
+                    className="flex max-w-4xl flex-col gap-2 border-t border-border/70 pt-4"
+                    style={{ marginTop: `${0.8 * basicSize}%` }}
+                  >
+                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-text-muted">
+                      <Fingerprint className="h-4 w-4 text-primary" />
+                      <span>Tunnel identity</span>
+                      <span className="font-mono text-primary">
+                        {displayAddress}
+                      </span>
+                    </div>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <code className="min-w-0 flex-1 break-all font-mono text-sm text-foreground md:text-base">
+                        {identityAddress}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={handleAddressCopy}
+                        className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border/70 bg-background/70 text-text-muted transition-colors hover:border-primary/40 hover:text-primary"
+                        aria-label="Copy tunnel address"
+                        title={addressCopied ? "Copied" : "Copy tunnel address"}
+                      >
+                        {addressCopied ? (
+                          <Check className="h-4 w-4 text-primary" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

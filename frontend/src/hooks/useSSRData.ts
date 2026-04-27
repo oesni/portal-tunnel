@@ -13,6 +13,7 @@ export interface PublicLeaseData {
   FirstSeenAt: string;
   LastSeenAt: string;
   name?: string;
+  address?: string;
   Hostname: string;
   Metadata: unknown;
   Ready: number;
